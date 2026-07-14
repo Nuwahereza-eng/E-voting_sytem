@@ -1,0 +1,497 @@
+:root {
+  --bg: #0b1020;
+  --panel: #131a2e;
+  --panel-2: #1a2340;
+  --border: #26315a;
+  --text: #e8ecf5;
+  --muted: #9aa4c2;
+  --accent: #7c5cff;
+  --accent-2: #22d3ee;
+  --danger: #f87171;
+  --ok: #34d399;
+  --radius: 12px;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(180deg, #0b1020 0%, #0d1330 100%);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+a {
+  color: var(--accent-2);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px 20px 80px;
+}
+
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(11, 16, 32, 0.6);
+  position: sticky;
+  top: 0;
+  backdrop-filter: blur(10px);
+  z-index: 10;
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: 0.5px;
+  color: var(--text);
+}
+.brand .dot {
+  color: var(--accent);
+}
+
+.nav-links a {
+  color: var(--muted);
+  margin-left: 20px;
+  font-size: 14px;
+}
+.nav-links a.active {
+  color: var(--text);
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+h1 {
+  font-size: 28px;
+  margin: 0 0 12px;
+}
+h2 {
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+
+label {
+  display: block;
+  font-size: 13px;
+  color: var(--muted);
+  margin: 12px 0 6px;
+}
+
+input,
+textarea,
+select {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+}
+
+textarea {
+  min-height: 90px;
+  resize: vertical;
+}
+
+button {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 16px;
+  font-weight: 600;
+  cursor: pointer;
+  font-size: 14px;
+}
+button:hover {
+  filter: brightness(1.1);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+button.secondary {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+button.danger {
+  background: var(--danger);
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--muted);
+  margin-right: 6px;
+}
+.pill.ok {
+  color: var(--ok);
+  border-color: rgba(52, 211, 153, 0.4);
+}
+.pill.err {
+  color: var(--danger);
+  border-color: rgba(248, 113, 113, 0.4);
+}
+
+.tally-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.tally-label {
+  min-width: 120px;
+  font-weight: 600;
+}
+.tally-bar {
+  flex: 1;
+  height: 24px;
+  background: var(--panel-2);
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+.tally-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.6s ease;
+}
+.tally-count {
+  min-width: 60px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.error {
+  color: var(--danger);
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin: 10px 0;
+  font-size: 14px;
+}
+.ok-box {
+  color: var(--ok);
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.verified-badge {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  color: var(--ok);
+  background: rgba(52, 211, 153, 0.08);
+  border: 1px solid rgba(52, 211, 153, 0.45);
+  padding: 14px 16px;
+  border-radius: 10px;
+  margin: 10px 0 16px;
+}
+.verified-check {
+  flex: 0 0 32px;
+  height: 32px;
+  width: 32px;
+  border-radius: 50%;
+  background: var(--ok);
+  color: #0b1020;
+  font-weight: 800;
+  font-size: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.verified-title {
+  font-weight: 700;
+  color: var(--ok);
+  font-size: 15px;
+}
+.verified-sub {
+  color: var(--muted);
+  font-size: 13px;
+  margin-top: 2px;
+}
+.verified-sub a {
+  color: var(--accent-2);
+}
+
+.unverified-note {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  padding: 12px 14px;
+  border-radius: 10px;
+  margin: 10px 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.hero {
+  text-align: center;
+  padding: 40px 20px 20px;
+}
+.hero h1 {
+  font-size: 42px;
+  letter-spacing: -0.5px;
+}
+.hero p {
+  color: var(--muted);
+  max-width: 620px;
+  margin: 12px auto 20px;
+}
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 720px) {
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .hero h1 {
+    font-size: 32px;
+  }
+}
+
+.steps {
+  color: var(--muted);
+  padding-left: 20px;
+  line-height: 1.7;
+}
+.steps li {
+  margin: 6px 0;
+}
+.steps li b a {
+  color: var(--text);
+}
+
+table th,
+table td {
+  color: var(--text);
+}
+table input {
+  margin: 0;
+}
+
+/* ---------- Layout helpers added for the professional-polish sprint. */
+
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.page-header h1 {
+  margin: 0 0 4px;
+}
+.page-header p {
+  margin: 0;
+}
+
+.back-link {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.row > * {
+  min-width: 0;
+}
+
+.small {
+  font-size: 12px;
+}
+
+.link-button {
+  background: transparent;
+  border: none;
+  color: var(--accent-2);
+  padding: 0;
+  font-weight: 500;
+  font-size: 14px;
+  cursor: pointer;
+}
+.link-button:hover {
+  text-decoration: underline;
+  filter: none;
+}
+.link-button.secondary {
+  background: transparent;
+  border: none;
+}
+
+/* Nav additions: separator + role-switch link. */
+.nav-links {
+  display: flex;
+  align-items: center;
+}
+.nav-links a.nav-role {
+  color: var(--accent-2);
+  font-weight: 600;
+}
+.nav-sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--border);
+  margin: 0 10px 0 20px;
+}
+
+/* Wallet chip in page headers. */
+.wallet-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.wallet-chip .mono {
+  font-size: 12px;
+}
+
+/* Two-up role cards on Home. */
+.role-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+  text-decoration: none;
+  color: inherit;
+}
+.role-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+.role-emoji {
+  font-size: 32px;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.role-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+}
+.role-sub {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Compact action cards on the admin hub. */
+.action-card {
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.action-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+.action-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.action-sub {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Muted card variant used to tuck config metadata at page bottom. */
+.muted-card {
+  background: transparent;
+  color: var(--muted);
+}
+
+/* Compact status card (used on Onboard page). */
+.status-card {
+  padding: 14px 20px;
+}
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* Key/value block used by the admin hub to show protocol config. */
+.kv {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 20px;
+  margin-top: 8px;
+}
+@media (max-width: 520px) {
+  .kv {
+    grid-template-columns: 1fr;
+  }
+}
+.kv-key {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+.kv-val {
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 600;
+}
+.kv-val.mono {
+  font-weight: 500;
+  font-size: 13px;
+}

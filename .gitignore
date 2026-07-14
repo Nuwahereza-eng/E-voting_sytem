@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+target/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+ussd-bridge/data/*.secrets.json
+
+# Build output
+dist/
+*.wasm
+
+# Editor
+.DS_Store
+.vscode/
+.idea/
+*.swp

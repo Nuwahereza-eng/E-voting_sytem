@@ -1,0 +1,21 @@
+[package]
+name = "evoting"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+doctest = false
+
+[dependencies]
+soroban-sdk = { workspace = true }
+
+[dev-dependencies]
+soroban-sdk = { workspace = true, features = ["testutils"] }
+# soroban-env-host 27.x declares `ed25519-dalek = ">=2.0.0"`. Left
+# unbounded, the resolver picks 3.0.0, whose `SigningKey::generate`
+# requires a newer `CryptoRng` bound that `rand_chacha 0.3.1`'s
+# `ChaCha20Rng` (still used by soroban-env-host) does not satisfy.
+# Pin to the 2.x line so tests build.
+ed25519-dalek = "=2.2.0"
