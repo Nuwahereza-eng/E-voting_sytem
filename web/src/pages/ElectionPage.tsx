@@ -7,6 +7,7 @@ import {
   ExternalLink,
   Loader2,
   Plus,
+  Printer,
   RefreshCw,
   Share2,
   Trash2,
@@ -18,9 +19,12 @@ import {
   encodeElectionQuestion,
   encodeOption,
   decodeOption,
+  readCommunity,
   readConfig,
   readElection,
+  readNextCommunityId,
   readNextElectionId,
+  type CommunityInfo,
   type ElectionInfo,
   type ProtocolConfig,
 } from "../soroban";
@@ -75,8 +79,14 @@ export function ElectionPage() {
   const [cfgErr, setCfgErr] = useState<string | null>(null);
 
   // Open form
+  //
+  // Community is auto-discovered from the connected wallet — we scan
+  // all communities and keep the ones this wallet admins. Organisers
+  // never type a numeric ID; they pick a name (or the only option is
+  // pre-selected).
+  const [myCommunities, setMyCommunities] = useState<CommunityInfo[] | null>(null);
   const [communityId, setCommunityId] = useState<number | null>(null);
-  const [electionName, setElectionName] = useState("Kampala SACCO \u2014 2026 Chair");
+  const [electionName, setElectionName] = useState("Kampala SACCO 2026 Chair");
   const [electionTitle, setElectionTitle] = useState("Who leads the SACCO in 2026?");
   // Candidate rows — each has a label (name) and an optional symbol
   // (party emblem, e.g. "\u2602 Umbrella") so voters who don't read
@@ -138,6 +148,42 @@ export function ElectionPage() {
       .catch((e) => setCfgErr(e instanceof Error ? e.message : String(e)));
     refreshRecent().catch(() => {});
   }, [refreshRecent]);
+
+  // Discover the communities this wallet admins. We scan every
+  // community (there aren't many in practice) and keep the ones whose
+  // admin matches. If there's exactly one it becomes the default; if
+  // there are several the organiser picks from a dropdown of names.
+  useEffect(() => {
+    if (!wallet.address) {
+      setMyCommunities(null);
+      setCommunityId(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const next = await readNextCommunityId();
+        const ids = Array.from({ length: next }, (_, i) => i);
+        const infos = await Promise.all(
+          ids.map((id) => readCommunity(id).catch(() => null)),
+        );
+        if (cancelled) return;
+        const mine = infos.filter(
+          (c): c is CommunityInfo => c !== null && c.admin === wallet.address,
+        );
+        setMyCommunities(mine);
+        setCommunityId((current) => {
+          if (current !== null && mine.some((c) => c.id === current)) return current;
+          return mine.length > 0 ? mine[mine.length - 1].id : null;
+        });
+      } catch {
+        if (!cancelled) setMyCommunities([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet.address]);
 
   async function doOpen() {
     if (!wallet.address || communityId === null || !cfg) return;
@@ -222,7 +268,6 @@ export function ElectionPage() {
         backTo="/organise"
         backLabel="Organise"
         title="Election"
-        subtitle="Open a new ballot, share its ID with voters, and close it after the deadline to refund your bond."
       />
 
       {cfgErr && (
@@ -240,9 +285,6 @@ export function ElectionPage() {
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="text-base">Connect an admin wallet</CardTitle>
-            <CardDescription>
-              Freighter signs the create/close transactions on Stellar.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <Button onClick={wallet.connect} disabled={wallet.connecting}>
@@ -264,40 +306,60 @@ export function ElectionPage() {
           <CardTitle className="text-base">Open a new election</CardTitle>
           {cfg && (
             <CardDescription>
-              This charges <b>{stroopsToXlm(cfg.fee)} XLM</b> (non-refundable) and locks a bond of
-              at least <b>{stroopsToXlm(cfg.bondMin)} XLM</b>. The bond is returned when you close
-              the election.
+              Fee <b>{stroopsToXlm(cfg.fee)} XLM</b>. Bond <b>{stroopsToXlm(cfg.bondMin)} XLM</b>{" "}
+              (refunded on close).
             </CardDescription>
           )}
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
-            <label className="mb-1 block text-sm font-medium">Community ID</label>
-            <input
-              type="number"
-              value={communityId ?? ""}
-              onChange={(e) =>
-                setCommunityId(e.target.value === "" ? null : Number(e.target.value))
-              }
-              placeholder="e.g. 0"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
+            <label className="mb-1 block text-sm font-medium">Community</label>
+            {myCommunities === null ? (
+              <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground">
+                <Loader2 className="size-4 animate-spin" />
+                Loading your communities…
+              </div>
+            ) : myCommunities.length === 0 ? (
+              <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm">
+                No communities under this wallet.{" "}
+                <Link to="/community" className="underline">
+                  Register one
+                </Link>{" "}
+                first.
+              </div>
+            ) : myCommunities.length === 1 ? (
+              <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm">
+                <Badge variant="outline">#{myCommunities[0].id}</Badge>
+                <span className="font-medium">{myCommunities[0].name}</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {myCommunities[0].memberCount} members
+                </span>
+              </div>
+            ) : (
+              <select
+                value={communityId ?? ""}
+                onChange={(e) => setCommunityId(Number(e.target.value))}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                {myCommunities.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name} · {c.memberCount} members
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">
-              Name <span className="text-xs font-normal text-muted-foreground">(long form, on the poster)</span>
-            </label>
+            <label className="mb-1 block text-sm font-medium">Name</label>
             <input
               value={electionName}
               onChange={(e) => setElectionName(e.target.value)}
-              placeholder="Kampala SACCO \u2014 2026 Chair"
+              placeholder="Kampala SACCO 2026 Chair"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">
-              Title <span className="text-xs font-normal text-muted-foreground">(the exact question voters answer)</span>
-            </label>
+            <label className="mb-1 block text-sm font-medium">Question</label>
             <input
               value={electionTitle}
               onChange={(e) => setElectionTitle(e.target.value)}
@@ -307,15 +369,10 @@ export function ElectionPage() {
           </div>
           <div>
             <label className="mb-1 block text-sm font-medium">Candidates</label>
-            <p className="mb-2 text-xs text-muted-foreground">
-              Give each candidate a <strong>symbol</strong> (party emblem, emoji, or short word
-              like \u201cUmbrella\u201d, \u201cWatch\u201d, \u201cBicycle\u201d) so voters who don't
-              read fluently can still identify their choice on the ballot.
-            </p>
             <div className="space-y-2">
               {candidates.map((c, i) => (
                 <div key={i} className="flex flex-wrap items-center gap-2">
-                  <span className="w-6 text-xs font-mono text-muted-foreground">#{i}</span>
+                  <span className="w-6 font-mono text-xs text-muted-foreground">#{i}</span>
                   <input
                     value={c.label}
                     onChange={(e) =>
@@ -333,8 +390,8 @@ export function ElectionPage() {
                         prev.map((p, j) => (j === i ? { ...p, symbol: e.target.value } : p)),
                       )
                     }
-                    placeholder="Symbol (e.g. \u2602 Umbrella)"
-                    className="w-52 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Symbol"
+                    className="w-40 rounded-md border border-input bg-background px-3 py-2 text-sm"
                   />
                   <Button
                     variant="ghost"
@@ -365,16 +422,13 @@ export function ElectionPage() {
           </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm font-medium">Voting closes on</label>
+              <label className="mb-1 block text-sm font-medium">Closes on</label>
               <input
                 type="datetime-local"
                 value={closesAtLocal}
                 onChange={(e) => setClosesAtLocal(e.target.value)}
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
-              <p className="mt-1 text-xs text-muted-foreground">
-                Results are sealed until this date and time (your local timezone).
-              </p>
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium">Bond (XLM)</label>
@@ -390,7 +444,7 @@ export function ElectionPage() {
           <div className="pt-2">
             <Button onClick={doOpen} disabled={busy || !wallet.address || communityId === null || !cfg}>
               {busy && <Loader2 className="size-4 animate-spin" />}
-              {busy ? "Opening..." : "Pay fee, lock bond, open election"}
+              {busy ? "Opening…" : "Open election"}
             </Button>
           </div>
         </CardContent>
@@ -402,10 +456,6 @@ export function ElectionPage() {
           <div className="flex flex-wrap items-center gap-3">
             <div className="min-w-0 flex-1">
               <CardTitle className="text-base">Recent elections</CardTitle>
-              <CardDescription>
-                The election ID is the number in the first column. Share it with your voters —
-                they enter it on the Vote page.
-              </CardDescription>
             </div>
             <Button
               variant="outline"
@@ -451,6 +501,8 @@ export function ElectionPage() {
                   {recent.map((e) => {
                     const isOpen = !e.closed && Date.now() / 1000 < e.closesAt;
                     const closedForResults = e.closed || Date.now() / 1000 >= e.closesAt;
+                    const communityName =
+                      myCommunities?.find((c) => c.id === e.communityId)?.name;
                     return (
                       <tr key={e.id} className="border-t border-border/60">
                         <td className="px-3 py-2 font-mono text-base font-semibold">{e.id}</td>
@@ -472,7 +524,9 @@ export function ElectionPage() {
                           })}
                           {e.options.length > 3 && <span>+{e.options.length - 3}</span>}
                         </td>
-                        <td className="px-3 py-2 text-muted-foreground">#{e.communityId}</td>
+                        <td className="px-3 py-2 text-muted-foreground">
+                          {communityName ?? `#${e.communityId}`}
+                        </td>
                         <td className="px-3 py-2">
                           {isOpen ? (
                             <Badge variant="success">{untilString(e.closesAt)}</Badge>
@@ -513,10 +567,6 @@ export function ElectionPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Close an election</CardTitle>
-          <CardDescription>
-            After the deadline anyone can close an election and trigger the bond refund. Before the
-            deadline only the community admin can close it early.
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
@@ -553,6 +603,104 @@ function ShareCard({ electionId }: { electionId: number }) {
   const voteUrl = `${window.location.origin}/vote/${electionId}`;
   const verifyUrl = `${window.location.origin}/verify/${electionId}`;
   const smsBody = `Sauti vote: election #${electionId}. Vote at ${voteUrl}`;
+  const [election, setElection] = useState<ElectionInfo | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    readElection(electionId)
+      .then((e) => {
+        if (!cancelled) setElection(e);
+      })
+      .catch(() => {
+        /* poster will still render with just the ID */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [electionId]);
+
+  function printPoster() {
+    const win = window.open("", "_blank", "width=800,height=1000");
+    if (!win) return;
+    const name = election?.meta?.name || `Election #${electionId}`;
+    const question = election?.meta?.title || election?.question || "";
+    const options = (election?.options ?? []).map((o) => decodeOption(o));
+    const closes = election
+      ? new Date(Number(election.closesAt) * 1000).toLocaleString()
+      : "";
+    const esc = (s: string) =>
+      s.replace(/[&<>"']/g, (c) =>
+        c === "&"
+          ? "&amp;"
+          : c === "<"
+            ? "&lt;"
+            : c === ">"
+              ? "&gt;"
+              : c === '"'
+                ? "&quot;"
+                : "&#39;",
+      );
+    const optionRows = options
+      .map(
+        (o, i) => `
+          <tr>
+            <td class="num">${i + 1}</td>
+            <td class="sym">${esc(o.symbol || "•")}</td>
+            <td class="lbl">${esc(o.label)}</td>
+          </tr>`,
+      )
+      .join("");
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Sauti — Election #${electionId} poster</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; color: #111; background: #fff; }
+  .sheet { padding: 40px 48px; max-width: 800px; margin: 0 auto; }
+  .brand { font-size: 14px; letter-spacing: .15em; text-transform: uppercase; color: #555; }
+  h1 { font-size: 40px; line-height: 1.1; margin: 8px 0 24px; }
+  .id-block { text-align: center; border: 3px solid #111; border-radius: 12px; padding: 24px 12px; margin: 16px 0 28px; }
+  .id-label { font-size: 12px; letter-spacing: .2em; text-transform: uppercase; color: #555; }
+  .id-num { font-family: ui-monospace, SFMono-Regular, monospace; font-size: 96px; font-weight: 800; line-height: 1; margin-top: 8px; }
+  .qn { font-size: 18px; margin: 16px 0 8px; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  td { border-bottom: 1px solid #ddd; padding: 10px 8px; font-size: 18px; vertical-align: middle; }
+  td.num { width: 40px; font-family: ui-monospace, SFMono-Regular, monospace; color: #555; }
+  td.sym { width: 56px; font-size: 32px; text-align: center; }
+  td.lbl { font-weight: 500; }
+  .how { margin-top: 24px; background: #f4f4f4; border-radius: 8px; padding: 16px; font-size: 14px; line-height: 1.5; }
+  .how h3 { margin: 0 0 8px; font-size: 14px; letter-spacing: .1em; text-transform: uppercase; }
+  .foot { margin-top: 24px; font-size: 11px; color: #777; text-align: center; }
+  .row { display: flex; gap: 16px; }
+  .row > div { flex: 1; }
+  @media print {
+    .no-print { display: none !important; }
+    .sheet { padding: 20px; }
+  }
+</style></head><body>
+<div class="sheet">
+  <div class="brand">SAUTI · Community vote</div>
+  <h1>${esc(name)}</h1>
+  ${question ? `<div class="qn">${esc(question)}</div>` : ""}
+  <div class="id-block">
+    <div class="id-label">Election ID — type this to vote</div>
+    <div class="id-num">${electionId}</div>
+  </div>
+  ${options.length ? `<h3 style="margin:20px 0 4px;font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:#555">Candidates</h3><table>${optionRows}</table>` : ""}
+  <div class="how">
+    <h3>How to vote</h3>
+    <div class="row">
+      <div><strong>Web:</strong> open <code>${esc(voteUrl)}</code></div>
+      <div><strong>SMS:</strong> text <code>VOTE ${electionId} &lt;option&gt;</code></div>
+    </div>
+    <div style="margin-top:8px"><strong>Verify results:</strong> <code>${esc(verifyUrl)}</code></div>
+  </div>
+  ${closes ? `<div class="foot">Voting closes: ${esc(closes)}</div>` : ""}
+  <div class="foot">Every ballot is a signed transaction on the Stellar Soroban ledger.</div>
+  <button class="no-print" style="margin:24px auto 0;display:block;padding:10px 20px;font-size:14px;cursor:pointer" onclick="window.print()">Print / Save as PDF</button>
+</div>
+<script>window.addEventListener('load', () => setTimeout(() => window.print(), 400));</script>
+</body></html>`);
+    win.document.close();
+  }
 
   return (
     <Card className="mb-6 border-primary/40 bg-primary/5">
@@ -579,6 +727,13 @@ function ShareCard({ electionId }: { electionId: number }) {
         <ShareRow label="Vote link" value={voteUrl} openHref={`/vote/${electionId}`} />
         <ShareRow label="Verify link" value={verifyUrl} openHref={`/verify/${electionId}`} />
         <ShareRow label="SMS / WhatsApp text" value={smsBody} multiline />
+
+        <div className="flex justify-end pt-2">
+          <Button variant="secondary" size="sm" onClick={printPoster} className="gap-1.5">
+            <Printer className="size-4" />
+            Download poster (PDF)
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

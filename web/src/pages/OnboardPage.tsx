@@ -368,7 +368,7 @@ export function OnboardPage() {
         backTo="/organise"
         backLabel="Organise"
         title="Enrol voters"
-        subtitle="Organise voters into named lists. Each voter needs an ID (student number, national ID, membership number) plus a phone. The ID is their real identity — a lost SIM never loses their vote."
+        subtitle="Organise voters into named lists. Each voter needs an ID plus a phone."
       />
 
       {err && (

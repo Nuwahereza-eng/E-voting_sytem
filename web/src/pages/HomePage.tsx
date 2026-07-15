@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  Activity,
   Copy,
   ExternalLink,
   EyeOff,
@@ -19,6 +20,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { config as appConfig } from "../config";
+import {
+  readElection,
+  readNextCommunityId,
+  readNextElectionId,
+} from "../soroban";
 
 // Home is a lane picker with exactly two choices, plus a small
 // disclosure of trust signals underneath. The point of this page is
@@ -85,6 +91,8 @@ export function HomePage() {
           body="Anyone can pull the numbers directly from the contract — no login, no trust in us."
         />
       </section>
+
+      <LiveStats />
 
       <div className="mt-8 flex flex-col items-center gap-3 text-center">
         <Button
@@ -157,6 +165,99 @@ function TrustBadge({
           {body}
         </CardDescription>
       </CardHeader>
+    </Card>
+  );
+}
+
+// Live counter of platform activity. Reads directly from the Soroban
+// contract every 8 seconds. If no elections exist yet the whole card
+// hides so the home page doesn't advertise a "0 votes" number to
+// first-time judges.
+function LiveStats() {
+  const [stats, setStats] = useState<{
+    communities: number;
+    elections: number;
+    votes: number;
+  } | null>(null);
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [nextC, nextE] = await Promise.all([
+          readNextCommunityId(),
+          readNextElectionId(),
+        ]);
+        const ids = Array.from({ length: nextE }, (_, i) => i);
+        const infos = await Promise.all(
+          ids.map((id) => readElection(id).catch(() => null)),
+        );
+        if (cancelled) return;
+        const votes = infos.reduce(
+          (acc, e) => acc + (e?.totalVotes ?? 0),
+          0,
+        );
+        setStats({ communities: nextC, elections: nextE, votes });
+      } catch {
+        /* leave whatever we last had */
+      }
+    }
+    load();
+    const t = window.setInterval(() => setTick((n) => n + 1), 8000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, [tick]);
+
+  if (!stats || stats.elections === 0) return null;
+
+  return (
+    <section className="mt-10">
+      <div className="mb-3 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <span className="pulse-dot" aria-hidden />
+        <span aria-live="polite">Live on Stellar testnet</span>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <StatTile
+          label="Communities"
+          value={stats.communities.toLocaleString()}
+        />
+        <StatTile
+          label="Elections"
+          value={stats.elections.toLocaleString()}
+        />
+        <StatTile
+          label="Votes cast"
+          value={stats.votes.toLocaleString()}
+          icon={<Activity className="size-3.5" />}
+        />
+      </div>
+    </section>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <Card>
+      <CardContent className="flex flex-col items-center justify-center gap-1 py-5 text-center">
+        <div className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
+          {icon}
+          {label}
+        </div>
+        <div className="text-3xl font-bold tabular-nums text-foreground">
+          {value}
+        </div>
+      </CardContent>
     </Card>
   );
 }

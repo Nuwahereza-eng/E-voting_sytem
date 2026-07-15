@@ -103,7 +103,7 @@ export function CommunityPage() {
         backTo="/organise"
         backLabel="Organise"
         title="Register community"
-        subtitle="Commit the member list to Soroban. The raw list never leaves your device — only the Merkle root does."
+        subtitle="Commit the member list to Soroban. Only the Merkle root leaves your device."
       />
 
       {err && <div className="error">{err}</div>}

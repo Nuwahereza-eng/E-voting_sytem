@@ -95,7 +95,7 @@ export function VerifyPage() {
         backTo="/participate"
         backLabel="Participate"
         title="Public verification"
-        subtitle="Anyone can look up any election ID here — no wallet, no login. The numbers below come straight from the Soroban contract state."
+        subtitle="Look up any election ID. Numbers come straight from the Soroban contract."
       />
 
       <Card>

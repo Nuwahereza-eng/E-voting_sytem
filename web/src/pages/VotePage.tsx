@@ -383,9 +383,7 @@ function IdVote({
           <CardHeader>
             <CardTitle className="text-base">Your voter ID</CardTitle>
             <CardDescription>
-              Use exactly what your organiser enrolled you under — NIN, student number, membership
-              number, whatever they typed in. We'll SMS a verification code to the phone(s) bound
-              to it.
+              We'll SMS a code to the phone your organiser enrolled.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -688,9 +686,8 @@ function IdVote({
             <CardHeader>
               <CardTitle className="text-base">Confirm your vote</CardTitle>
               <CardDescription>
-                Please double-check. Once submitted, your vote is on-chain and{" "}
-                <strong>cannot be changed or undone</strong>. You will not be able to vote in this
-                election again.
+                Once submitted, your vote is on-chain and{" "}
+                <strong>cannot be changed</strong>.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -939,10 +936,7 @@ function WalletVoteFlow({ defaultElectionId }: { defaultElectionId: number | nul
       <Card className="mb-4">
         <CardHeader>
           <CardTitle className="text-base">Which election?</CardTitle>
-          <CardDescription>
-            Your organiser shares this ID via SMS, WhatsApp, or a poster. It's a small whole number
-            like 0, 1, 2, …
-          </CardDescription>
+          <CardDescription>Enter the election ID your organiser shared.</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center gap-2">

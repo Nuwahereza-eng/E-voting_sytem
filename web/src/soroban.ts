@@ -244,6 +244,12 @@ export async function readNextElectionId(): Promise<number> {
   return Number(scValToNative(retval));
 }
 
+export async function readNextCommunityId(): Promise<number> {
+  const op = contract().call("next_community_id");
+  const retval = await simulateRead(op);
+  return Number(scValToNative(retval));
+}
+
 // ---------- write calls (built here, signed by Freighter, submitted) -----
 
 /**
