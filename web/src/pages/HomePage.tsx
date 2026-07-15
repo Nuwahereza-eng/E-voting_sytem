@@ -1,6 +1,14 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Landmark, ShieldCheck, Vote as VoteIcon } from "lucide-react";
+import {
+  Copy,
+  ExternalLink,
+  EyeOff,
+  Landmark,
+  ScanLine,
+  ShieldCheck,
+  Vote as VoteIcon,
+} from "lucide-react";
 import {
   Card,
   CardContent,
@@ -43,6 +51,8 @@ export function HomePage() {
           icon={<VoteIcon className="size-6" />}
           title="Participate in an election"
           description="Cast a ballot, check if you're on the voter roll, or verify a public result."
+          cta="Start voting"
+          reassurance="Free · takes 30 seconds"
           accent="from-accent/25 to-transparent"
           ring="ring-accent/30 group-hover:ring-accent/60"
         />
@@ -51,8 +61,28 @@ export function HomePage() {
           icon={<Landmark className="size-6" />}
           title="Organise an election"
           description="Enrol voters, register a community, and run a ballot. Small fee + refundable bond."
+          cta="Set up an election"
+          reassurance="Small fee · bond refunds on close"
           accent="from-primary/25 to-transparent"
           ring="ring-primary/30 group-hover:ring-primary/60"
+        />
+      </section>
+
+      <section className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <TrustBadge
+          icon={<EyeOff className="size-4" />}
+          title="No central authority"
+          body="Votes are recorded on Stellar. There's no server whose owner can edit the tally."
+        />
+        <TrustBadge
+          icon={<ShieldCheck className="size-4" />}
+          title="Tamper-evident tally"
+          body="Every ballot is a signed Soroban transaction. Any change would break the chain."
+        />
+        <TrustBadge
+          icon={<ScanLine className="size-4" />}
+          title="Open verification"
+          body="Anyone can pull the numbers directly from the contract — no login, no trust in us."
         />
       </section>
 
@@ -101,16 +131,104 @@ export function HomePage() {
         )}
       </div>
 
-      <div className="mt-10 text-center text-xs text-muted-foreground">
-        Network <b className="text-foreground">{appConfig.network}</b>{" "}
-        · Contract{" "}
-        <span className="font-mono">
-          {appConfig.contractId
-            ? `${appConfig.contractId.slice(0, 8)}…${appConfig.contractId.slice(-6)}`
-            : "(not set)"}
-        </span>
-      </div>
+      <TransparencyCard />
     </>
+  );
+}
+
+// A small trust-signal card used in the row under the two lanes.
+function TrustBadge({
+  icon,
+  title,
+  body,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <Card className="h-full">
+      <CardHeader className="p-4">
+        <div className="mb-2 inline-flex size-8 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30">
+          {icon}
+        </div>
+        <CardTitle className="text-sm font-semibold">{title}</CardTitle>
+        <CardDescription className="text-xs leading-relaxed">
+          {body}
+        </CardDescription>
+      </CardHeader>
+    </Card>
+  );
+}
+
+// Public transparency block — click-to-copy contract ID and a link to
+// the Stellar Explorer. This replaces the tiny muted footer so trust
+// signals become actionable, not just visible.
+function TransparencyCard() {
+  const [copied, setCopied] = useState(false);
+  const cid = appConfig.contractId;
+  const network = (appConfig.network || "").toLowerCase();
+  const isMainnet = network.includes("main") || network === "public";
+  const explorerBase = isMainnet
+    ? "https://stellar.expert/explorer/public/contract/"
+    : "https://stellar.expert/explorer/testnet/contract/";
+
+  async function copy() {
+    if (!cid) return;
+    try {
+      await navigator.clipboard.writeText(cid);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return (
+    <Card className="mt-10">
+      <CardHeader className="pb-3">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="size-4 text-success" />
+          <CardTitle className="text-sm font-semibold">Transparency</CardTitle>
+        </div>
+        <CardDescription>
+          Sauti stores every ballot on Stellar Soroban. Anyone can look up the
+          contract and audit the tally.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-[auto_1fr_auto] sm:items-center">
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          Contract
+        </span>
+        <code className="block break-all rounded-md border border-border/60 bg-input/50 px-3 py-2 font-mono text-xs">
+          {cid || "(not set — configure VITE_CONTRACT_ID)"}
+        </code>
+        <div className="flex flex-wrap gap-2 sm:justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={!cid}
+            onClick={copy}
+            className="gap-1.5"
+          >
+            <Copy className="size-3.5" />
+            {copied ? "Copied" : "Copy"}
+          </Button>
+          <a
+            href={cid ? `${explorerBase}${cid}` : "#"}
+            target="_blank"
+            rel="noreferrer"
+            className={
+              "inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-3 py-1.5 text-xs font-medium text-foreground no-underline hover:bg-secondary/70 " +
+              (cid ? "" : "pointer-events-none opacity-50")
+            }
+          >
+            <ExternalLink className="size-3.5" />
+            View on Stellar Explorer
+          </a>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -121,6 +239,8 @@ function LaneCard({
   icon,
   title,
   description,
+  cta,
+  reassurance,
   accent,
   ring,
 }: {
@@ -128,6 +248,8 @@ function LaneCard({
   icon: React.ReactNode;
   title: string;
   description: string;
+  cta: string;
+  reassurance: string;
   accent: string;
   ring: string;
 }) {
@@ -138,7 +260,7 @@ function LaneCard({
     >
       <Card
         className={
-          "relative h-full overflow-hidden transition-all duration-200 " +
+          "relative flex h-full flex-col overflow-hidden transition-all duration-200 " +
           "group-hover:-translate-y-1 group-hover:border-primary/40 " +
           "group-focus-visible:ring-2 group-focus-visible:ring-ring"
         }
@@ -156,6 +278,13 @@ function LaneCard({
           <CardTitle className="text-xl">{title}</CardTitle>
           <CardDescription className="text-sm">{description}</CardDescription>
         </CardHeader>
+        <CardContent className="relative mt-auto flex items-end justify-between pt-2">
+          <span className="text-xs text-muted-foreground">{reassurance}</span>
+          <span className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-transform group-hover:translate-x-0.5">
+            {cta}
+            <span aria-hidden>→</span>
+          </span>
+        </CardContent>
       </Card>
     </Link>
   );

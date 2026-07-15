@@ -24,7 +24,7 @@
     --secondary-foreground: 220 25% 94%;
 
     --muted: 224 24% 20%;
-    --muted-foreground: 220 12% 68%;
+    --muted-foreground: 220 15% 76%;
 
     --accent: 187 92% 48%;
     --accent-foreground: 240 20% 10%;
@@ -249,5 +249,29 @@
 
   a {
     @apply text-accent;
+  }
+
+  .warn-box {
+    @apply my-2.5 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-4 py-2.5 text-sm text-yellow-300;
+  }
+
+  .pulse-dot {
+    @apply relative inline-flex h-2 w-2 rounded-full bg-success;
+  }
+  .pulse-dot::before {
+    content: "";
+    @apply absolute inset-0 rounded-full bg-success;
+    animation: sauti-pulse 1.6s ease-out infinite;
+  }
+}
+
+@keyframes sauti-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.6);
+    opacity: 0;
   }
 }

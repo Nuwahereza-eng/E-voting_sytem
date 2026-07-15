@@ -1,5 +1,5 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
-import { Vote as VoteIcon } from "lucide-react";
+import { ShieldCheck, Vote as VoteIcon } from "lucide-react";
 import { HomePage } from "./pages/HomePage";
 import { ParticipatePage } from "./pages/ParticipatePage";
 import { OrganisePage } from "./pages/OrganisePage";
@@ -9,13 +9,19 @@ import { ElectionPage } from "./pages/ElectionPage";
 import { MyStatusPage } from "./pages/MyStatusPage";
 import { VotePage } from "./pages/VotePage";
 import { VerifyPage } from "./pages/VerifyPage";
+import { Badge } from "@/components/ui/badge";
+import { config as appConfig } from "./config";
 
 // A brand-only top bar. Every navigational choice belongs on the home
 // hub or on the current page — the app has no persistent side menu.
+// The right-hand trust strip is always visible so the user never
+// forgets the results are auditable on a public chain.
 function Nav() {
+  const network = (appConfig.network || "").toLowerCase();
+  const isMainnet = network.includes("main") || network === "public";
   return (
     <nav className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur">
-      <div className="mx-auto flex h-14 max-w-5xl items-center px-5">
+      <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-5">
         <Link
           to="/"
           className="group inline-flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground hover:no-underline"
@@ -27,6 +33,29 @@ function Nav() {
             Sauti<span className="text-primary">.</span>
           </span>
         </Link>
+        <div className="ml-auto flex items-center gap-2">
+          <Link to="/verify" className="no-underline">
+            <Badge
+              variant="outline"
+              className="gap-1 border-success/40 bg-success/10 text-success"
+            >
+              <ShieldCheck className="size-3" />
+              <span className="hidden sm:inline">On-chain verified</span>
+              <span className="sm:hidden">Verified</span>
+            </Badge>
+          </Link>
+          <Badge
+            variant="outline"
+            className={
+              "font-mono text-[10px] uppercase tracking-wider " +
+              (isMainnet
+                ? "border-primary/40 text-primary"
+                : "border-yellow-500/40 bg-yellow-500/10 text-yellow-300")
+            }
+          >
+            {network || "unknown"}
+          </Badge>
+        </div>
       </div>
     </nav>
   );
