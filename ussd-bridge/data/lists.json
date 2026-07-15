@@ -1,0 +1,20 @@
+{
+  "activeId": "default",
+  "lists": [
+    {
+      "id": "default",
+      "name": "Default",
+      "createdAt": 1784018414786
+    },
+    {
+      "id": "class-of-2026",
+      "name": "Class of 2026",
+      "createdAt": 1784018435584
+    },
+    {
+      "id": "utamu",
+      "name": "utamu",
+      "createdAt": 1784018580012
+    }
+  ]
+}

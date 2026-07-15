@@ -1,497 +1,253 @@
-:root {
-  --bg: #0b1020;
-  --panel: #131a2e;
-  --panel-2: #1a2340;
-  --border: #26315a;
-  --text: #e8ecf5;
-  --muted: #9aa4c2;
-  --accent: #7c5cff;
-  --accent-2: #22d3ee;
-  --danger: #f87171;
-  --ok: #34d399;
-  --radius: 12px;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, sans-serif;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ------------------------------------------------------------------ */
+/* Sauti design tokens. Dark theme by default. Colors are HSL so      */
+/* Tailwind's `hsl(var(--x))` bindings work.                          */
+/* ------------------------------------------------------------------ */
+@layer base {
+  :root {
+    --background: 226 43% 8%;
+    --foreground: 220 25% 94%;
+
+    --card: 226 34% 13%;
+    --card-foreground: 220 25% 94%;
+
+    --popover: 226 34% 13%;
+    --popover-foreground: 220 25% 94%;
+
+    --primary: 251 100% 68%;
+    --primary-foreground: 240 20% 10%;
+
+    --secondary: 224 32% 22%;
+    --secondary-foreground: 220 25% 94%;
+
+    --muted: 224 24% 20%;
+    --muted-foreground: 220 12% 68%;
+
+    --accent: 187 92% 48%;
+    --accent-foreground: 240 20% 10%;
+
+    --destructive: 0 84% 65%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 65% 52%;
+    --success-foreground: 240 20% 10%;
+
+    --border: 226 30% 22%;
+    --input: 226 28% 18%;
+    --ring: 251 100% 68%;
+
+    --radius: 0.75rem;
+  }
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    @apply min-h-screen bg-background text-foreground antialiased;
+  }
+  body {
+    background:
+      radial-gradient(1200px 500px at 50% -200px, hsl(var(--primary) / 0.18), transparent 60%),
+      radial-gradient(800px 400px at 100% 10%, hsl(var(--accent) / 0.10), transparent 60%),
+      hsl(var(--background));
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
 }
 
-body {
-  margin: 0;
-  background: linear-gradient(180deg, #0b1020 0%, #0d1330 100%);
-  color: var(--text);
-  min-height: 100vh;
-}
+/* ------------------------------------------------------------------ */
+/* Legacy class-name shims used by pages that have not been migrated  */
+/* to the shadcn primitives yet. Each rule can be deleted the moment  */
+/* its page is rewritten with <Card />, <Button />, etc.              */
+/* ------------------------------------------------------------------ */
+@layer components {
+  .container {
+    @apply mx-auto w-full max-w-5xl px-5 pb-20 pt-8;
+  }
 
-a {
-  color: var(--accent-2);
-  text-decoration: none;
-}
-a:hover {
-  text-decoration: underline;
-}
+  .nav {
+    @apply sticky top-0 z-10 flex items-center justify-between border-b border-border/60 bg-background/70 px-6 py-4 backdrop-blur;
+  }
+  .brand {
+    @apply text-xl font-bold tracking-wide text-foreground;
+    text-decoration: none;
+  }
+  .brand:hover {
+    text-decoration: none;
+  }
+  .brand .dot {
+    @apply text-primary;
+  }
 
-.container {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px 20px 80px;
-}
+  .card {
+    @apply mb-5 rounded-xl border border-border/70 bg-card p-5 text-card-foreground shadow-sm;
+  }
 
-.nav {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(11, 16, 32, 0.6);
-  position: sticky;
-  top: 0;
-  backdrop-filter: blur(10px);
-  z-index: 10;
-}
-
-.brand {
-  font-weight: 700;
-  font-size: 20px;
-  letter-spacing: 0.5px;
-  color: var(--text);
-}
-.brand .dot {
-  color: var(--accent);
-}
-
-.nav-links a {
-  color: var(--muted);
-  margin-left: 20px;
-  font-size: 14px;
-}
-.nav-links a.active {
-  color: var(--text);
-}
-
-.card {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 20px;
-  margin-bottom: 20px;
-}
-
-h1 {
-  font-size: 28px;
-  margin: 0 0 12px;
-}
-h2 {
-  font-size: 20px;
-  margin: 0 0 12px;
-}
-
-label {
-  display: block;
-  font-size: 13px;
-  color: var(--muted);
-  margin: 12px 0 6px;
-}
-
-input,
-textarea,
-select {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel-2);
-  color: var(--text);
-  font-size: 14px;
-  font-family: inherit;
-}
-
-textarea {
-  min-height: 90px;
-  resize: vertical;
-}
-
-button {
-  background: var(--accent);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 10px 16px;
-  font-weight: 600;
-  cursor: pointer;
-  font-size: 14px;
-}
-button:hover {
-  filter: brightness(1.1);
-}
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-button.secondary {
-  background: var(--panel-2);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-button.danger {
-  background: var(--danger);
-}
-
-.muted {
-  color: var(--muted);
-  font-size: 14px;
-}
-
-.mono {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  word-break: break-all;
-}
-
-.pill {
-  display: inline-block;
-  padding: 3px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--muted);
-  margin-right: 6px;
-}
-.pill.ok {
-  color: var(--ok);
-  border-color: rgba(52, 211, 153, 0.4);
-}
-.pill.err {
-  color: var(--danger);
-  border-color: rgba(248, 113, 113, 0.4);
-}
-
-.tally-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 10px;
-}
-.tally-label {
-  min-width: 120px;
-  font-weight: 600;
-}
-.tally-bar {
-  flex: 1;
-  height: 24px;
-  background: var(--panel-2);
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-.tally-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  transition: width 0.6s ease;
-}
-.tally-count {
-  min-width: 60px;
-  text-align: right;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.error {
-  color: var(--danger);
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid rgba(248, 113, 113, 0.4);
-  padding: 10px 14px;
-  border-radius: 8px;
-  margin: 10px 0;
-  font-size: 14px;
-}
-.ok-box {
-  color: var(--ok);
-  background: rgba(52, 211, 153, 0.1);
-  border: 1px solid rgba(52, 211, 153, 0.4);
-  padding: 10px 14px;
-  border-radius: 8px;
-  margin: 10px 0;
-  font-size: 14px;
-}
-
-.verified-badge {
-  display: flex;
-  gap: 14px;
-  align-items: flex-start;
-  color: var(--ok);
-  background: rgba(52, 211, 153, 0.08);
-  border: 1px solid rgba(52, 211, 153, 0.45);
-  padding: 14px 16px;
-  border-radius: 10px;
-  margin: 10px 0 16px;
-}
-.verified-check {
-  flex: 0 0 32px;
-  height: 32px;
-  width: 32px;
-  border-radius: 50%;
-  background: var(--ok);
-  color: #0b1020;
-  font-weight: 800;
-  font-size: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.verified-title {
-  font-weight: 700;
-  color: var(--ok);
-  font-size: 15px;
-}
-.verified-sub {
-  color: var(--muted);
-  font-size: 13px;
-  margin-top: 2px;
-}
-.verified-sub a {
-  color: var(--accent-2);
-}
-
-.unverified-note {
-  color: #fbbf24;
-  background: rgba(251, 191, 36, 0.08);
-  border: 1px solid rgba(251, 191, 36, 0.4);
-  padding: 12px 14px;
-  border-radius: 10px;
-  margin: 10px 0 16px;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.hero {
-  text-align: center;
-  padding: 40px 20px 20px;
-}
-.hero h1 {
-  font-size: 42px;
-  letter-spacing: -0.5px;
-}
-.hero p {
-  color: var(--muted);
-  max-width: 620px;
-  margin: 12px auto 20px;
-}
-
-.grid-2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-@media (max-width: 720px) {
-  .grid-2 {
-    grid-template-columns: 1fr;
+  .hero {
+    @apply mx-auto max-w-2xl px-4 py-10 text-center;
   }
   .hero h1 {
-    font-size: 32px;
+    @apply mb-3 text-3xl font-bold tracking-tight sm:text-4xl;
   }
-}
+  .hero p {
+    @apply text-muted-foreground;
+  }
 
-.steps {
-  color: var(--muted);
-  padding-left: 20px;
-  line-height: 1.7;
-}
-.steps li {
-  margin: 6px 0;
-}
-.steps li b a {
-  color: var(--text);
-}
+  h1 {
+    @apply mb-3 text-2xl font-semibold tracking-tight;
+  }
+  h2 {
+    @apply mb-3 text-lg font-semibold;
+  }
 
-table th,
-table td {
-  color: var(--text);
-}
-table input {
-  margin: 0;
-}
+  label {
+    @apply mb-1.5 mt-3 block text-xs font-medium text-muted-foreground;
+  }
 
-/* ---------- Layout helpers added for the professional-polish sprint. */
+  input,
+  textarea,
+  select {
+    @apply block w-full rounded-md border border-input bg-input/70 px-3 py-2 text-sm text-foreground shadow-sm outline-none transition placeholder:text-muted-foreground/60 focus:border-ring focus:ring-2 focus:ring-ring/40;
+  }
+  textarea {
+    @apply min-h-[90px] resize-y;
+  }
 
-.page-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-.page-header h1 {
-  margin: 0 0 4px;
-}
-.page-header p {
-  margin: 0;
-}
+  button {
+    @apply inline-flex select-none items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  button.secondary {
+    @apply bg-secondary text-secondary-foreground hover:bg-secondary/80;
+  }
+  button.danger {
+    @apply bg-destructive text-destructive-foreground hover:brightness-110;
+  }
+  button.link-button {
+    @apply h-auto bg-transparent p-0 font-medium text-accent shadow-none hover:bg-transparent hover:underline;
+  }
 
-.back-link {
-  color: var(--muted);
-  font-size: 13px;
-  white-space: nowrap;
-}
+  .muted {
+    @apply text-sm text-muted-foreground;
+  }
+  .small {
+    @apply text-xs;
+  }
+  .mono {
+    @apply break-all font-mono text-xs;
+  }
 
-.row {
-  display: flex;
-  gap: 16px;
-  align-items: flex-end;
-  flex-wrap: wrap;
-}
-.row > * {
-  min-width: 0;
-}
+  .pill {
+    @apply mr-1 inline-flex items-center rounded-full border border-border bg-secondary/60 px-2.5 py-0.5 text-xs text-muted-foreground;
+  }
+  .pill.ok {
+    @apply border-success/40 bg-success/10 text-success;
+  }
+  .pill.err {
+    @apply border-destructive/40 bg-destructive/10 text-destructive;
+  }
 
-.small {
-  font-size: 12px;
-}
+  .error {
+    @apply my-2.5 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive;
+  }
+  .ok-box {
+    @apply my-2.5 rounded-md border border-success/40 bg-success/10 px-4 py-2.5 text-sm text-success;
+  }
 
-.link-button {
-  background: transparent;
-  border: none;
-  color: var(--accent-2);
-  padding: 0;
-  font-weight: 500;
-  font-size: 14px;
-  cursor: pointer;
-}
-.link-button:hover {
-  text-decoration: underline;
-  filter: none;
-}
-.link-button.secondary {
-  background: transparent;
-  border: none;
-}
+  .verified-badge {
+    @apply my-2.5 flex items-start gap-3 rounded-lg border border-success/50 bg-success/10 px-4 py-3 text-success;
+  }
+  .verified-check {
+    @apply flex h-8 w-8 flex-none items-center justify-center rounded-full bg-success text-base font-extrabold text-background;
+  }
+  .verified-title {
+    @apply text-sm font-bold text-success;
+  }
+  .verified-sub {
+    @apply mt-0.5 text-xs text-muted-foreground;
+  }
 
-/* Nav additions: separator + role-switch link. */
-.nav-links {
-  display: flex;
-  align-items: center;
-}
-.nav-links a.nav-role {
-  color: var(--accent-2);
-  font-weight: 600;
-}
-.nav-sep {
-  display: inline-block;
-  width: 1px;
-  height: 18px;
-  background: var(--border);
-  margin: 0 10px 0 20px;
-}
+  .unverified-note {
+    @apply my-2.5 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm leading-relaxed text-yellow-300;
+  }
 
-/* Wallet chip in page headers. */
-.wallet-chip {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  color: var(--muted);
-}
-.wallet-chip .mono {
-  font-size: 12px;
-}
+  .grid-2 {
+    @apply grid grid-cols-1 gap-5 sm:grid-cols-2;
+  }
+  .grid-3 {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3;
+  }
 
-/* Two-up role cards on Home. */
-.role-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  transition: transform 0.15s ease, border-color 0.15s ease;
-  text-decoration: none;
-  color: inherit;
-}
-.role-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  text-decoration: none;
-}
-.role-emoji {
-  font-size: 32px;
-  line-height: 1;
-  margin-bottom: 6px;
-}
-.role-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text);
-}
-.role-sub {
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.5;
-}
+  .steps {
+    @apply list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-muted-foreground;
+  }
+  .steps li b a {
+    @apply text-foreground;
+  }
 
-/* Compact action cards on the admin hub. */
-.action-card {
-  text-decoration: none;
-  color: inherit;
-  transition: transform 0.15s ease, border-color 0.15s ease;
-}
-.action-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--accent);
-  text-decoration: none;
-}
-.action-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text);
-  margin-bottom: 4px;
-}
-.action-sub {
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.5;
-}
+  .tally-row {
+    @apply mb-2.5 flex items-center gap-3;
+  }
+  .tally-label {
+    @apply min-w-[120px] font-semibold;
+  }
+  .tally-bar {
+    @apply h-6 flex-1 overflow-hidden rounded-full border border-border bg-secondary/70;
+  }
+  .tally-fill {
+    @apply h-full bg-gradient-to-r from-primary to-accent transition-[width] duration-500;
+  }
+  .tally-count {
+    @apply min-w-[60px] text-right tabular-nums text-muted-foreground;
+  }
 
-/* Muted card variant used to tuck config metadata at page bottom. */
-.muted-card {
-  background: transparent;
-  color: var(--muted);
-}
+  .page-header {
+    @apply mb-5 flex flex-wrap items-end justify-between gap-4;
+  }
+  .page-header h1 {
+    @apply mb-1;
+  }
+  .page-header p {
+    @apply m-0;
+  }
+  .back-link {
+    @apply whitespace-nowrap text-xs text-muted-foreground hover:text-foreground;
+  }
 
-/* Compact status card (used on Onboard page). */
-.status-card {
-  padding: 14px 20px;
-}
-.status-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
+  .row {
+    @apply flex flex-wrap items-end gap-4;
+  }
 
-/* Key/value block used by the admin hub to show protocol config. */
-.kv {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px 20px;
-  margin-top: 8px;
-}
-@media (max-width: 520px) {
+  .status-card {
+    @apply px-5 py-3.5;
+  }
+  .status-row {
+    @apply flex flex-wrap items-center gap-3;
+  }
+
+  .muted-card {
+    @apply border-transparent bg-transparent text-muted-foreground shadow-none;
+  }
+
   .kv {
-    grid-template-columns: 1fr;
+    @apply mt-2 grid grid-cols-1 gap-x-5 gap-y-3 sm:grid-cols-2;
   }
-}
-.kv-key {
-  color: var(--muted);
-  font-size: 12px;
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-.kv-val {
-  color: var(--text);
-  font-size: 15px;
-  font-weight: 600;
-}
-.kv-val.mono {
-  font-weight: 500;
-  font-size: 13px;
+  .kv-key {
+    @apply text-[11px] uppercase tracking-wider text-muted-foreground;
+  }
+  .kv-val {
+    @apply text-[15px] font-semibold text-foreground;
+  }
+  .kv-val.mono {
+    @apply font-mono text-xs font-medium;
+  }
+
+  a {
+    @apply text-accent;
+  }
 }

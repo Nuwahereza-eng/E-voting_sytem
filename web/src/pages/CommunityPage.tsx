@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { buildTree, toHex } from "../merkle";
-import { registerCommunity } from "../soroban";
-import { fetchMembers } from "../bridge";
+import { readCommunity, registerCommunity, updateMembers } from "../soroban";
+import { bindListCommunity, fetchLists, fetchMembers } from "../bridge";
 import { useWallet } from "../wallet";
 import { config } from "../config";
+import { PageHeader } from "@/components/PageHeader";
 
 // Community registration. Extracted from the old monolithic AdminPage
 // so an organiser can focus on one thing at a time. The member list is
@@ -77,6 +78,16 @@ export function CommunityPage() {
         wallet.sign,
       );
       setCommunityId(id);
+      // Persist the mapping "active bridge list == community #id" so
+      // the OTP voting flow can filter elections by community without
+      // asking the voter which list they're on. Non-fatal on failure —
+      // the organiser can rebind manually if this ever misses.
+      try {
+        const { activeId } = await fetchLists();
+        if (activeId) await bindListCommunity(activeId, id);
+      } catch {
+        /* ignore — binding is best-effort */
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -88,16 +99,12 @@ export function CommunityPage() {
 
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Register community</h1>
-          <p className="muted">
-            Commit the member list to Soroban. The raw list never leaves
-            your device — only the Merkle root does.
-          </p>
-        </div>
-        <Link to="/admin" className="back-link">← Back</Link>
-      </div>
+      <PageHeader
+        backTo="/organise"
+        backLabel="Organise"
+        title="Register community"
+        subtitle="Commit the member list to Soroban. The raw list never leaves your device — only the Merkle root does."
+      />
 
       {err && <div className="error">{err}</div>}
 
@@ -167,11 +174,147 @@ export function CommunityPage() {
           {communityId !== null && (
             <div className="ok-box">
               Community registered. ID = <b>{communityId}</b>.{" "}
-              <Link to="/admin/election">Open an election →</Link>
+              <Link to="/election">Open an election →</Link>
             </div>
           )}
         </div>
       )}
+
+      {wallet.address && (
+        <SyncCommunityCard
+          admin={wallet.address}
+          sign={wallet.sign}
+        />
+      )}
     </>
+  );
+}
+
+// -------- Sync existing community with the current bridge list --------
+//
+// When the organiser enrols new voters (or removes some) after having
+// already registered a community on-chain, the on-chain merkle_root
+// falls out of sync with the bridge's current member list. Any vote
+// then fails with Error #7 (InvalidProof). This card lets the admin
+// push the current list's root back on-chain via update_members().
+function SyncCommunityCard({
+  admin,
+  sign,
+}: {
+  admin: string;
+  sign: (xdr: string, opts: { networkPassphrase: string }) => Promise<{ signedTxXdr: string }>;
+}) {
+  const [cid, setCid] = useState<string>("");
+  const [checking, setChecking] = useState(false);
+  const [check, setCheck] = useState<null | {
+    onChainRoot: string;
+    onChainCount: number;
+    bridgeRoot: string;
+    bridgeCount: number;
+    match: boolean;
+  }>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function doCheck() {
+    setChecking(true);
+    setErr(null);
+    setMsg(null);
+    setCheck(null);
+    try {
+      const id = Number(cid);
+      if (!Number.isInteger(id) || id < 0) throw new Error("Enter a valid community ID");
+      const [b, c] = await Promise.all([fetchMembers(), readCommunity(id)]);
+      if (b.count === 0) throw new Error("The bridge has no voters in the active list.");
+      const bridgeRoot = toHex((await buildTree(b.members)).root);
+      setCheck({
+        onChainRoot: c.merkleRoot,
+        onChainCount: c.memberCount,
+        bridgeRoot,
+        bridgeCount: b.count,
+        match: bridgeRoot.toLowerCase() === c.merkleRoot.toLowerCase(),
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function doSync() {
+    if (!check) return;
+    setBusy(true);
+    setErr(null);
+    setMsg(null);
+    try {
+      const id = Number(cid);
+      const hash = await updateMembers(admin, id, check.bridgeRoot, check.bridgeCount, sign);
+      setMsg(`Community #${id} synced. Tx: ${hash.slice(0, 12)}…`);
+      // small delay so the RPC has a chance to index the new state
+      await new Promise((r) => setTimeout(r, 1500));
+      await doCheck();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <h2 style={{ marginTop: 0 }}>Sync existing community</h2>
+      <p className="muted">
+        Use this after enrolling or removing voters. It pushes the current voter list's Merkle
+        root back on-chain so proofs verify. Only the community admin can call this.
+      </p>
+      <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>
+        <div>
+          <label>Community ID</label>
+          <input
+            value={cid}
+            onChange={(e) => {
+              setCid(e.target.value);
+              setCheck(null);
+              setMsg(null);
+            }}
+            placeholder="e.g. 0"
+            style={{ width: 120 }}
+          />
+        </div>
+        <button className="secondary" onClick={doCheck} disabled={checking || !cid.trim()}>
+          {checking ? "Checking…" : "Check status"}
+        </button>
+      </div>
+
+      {check && (
+        <div style={{ marginTop: 12 }}>
+          <div className={check.match ? "ok-box" : "warn-box"}>
+            {check.match ? (
+              <>Community #{cid} is already in sync ({check.bridgeCount} voters).</>
+            ) : (
+              <>
+                Out of sync. On-chain has {check.onChainCount} voters, bridge active list has{" "}
+                {check.bridgeCount}. Click <b>Sync now</b> to update.
+              </>
+            )}
+          </div>
+          <div style={{ marginTop: 8 }} className="mono small">
+            on-chain: {check.onChainRoot}
+            <br />
+            bridge&nbsp;&nbsp;: {check.bridgeRoot}
+          </div>
+          {!check.match && (
+            <div style={{ marginTop: 12 }}>
+              <button onClick={doSync} disabled={busy}>
+                {busy ? "Syncing…" : "Sync now (update_members)"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {msg && <div className="ok-box" style={{ marginTop: 12 }}>{msg}</div>}
+      {err && <div className="error" style={{ marginTop: 12 }}>{err}</div>}
+    </div>
   );
 }

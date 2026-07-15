@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import { readElection, type ElectionInfo } from "../soroban";
+import { decodeElectionQuestion, readElection, type ElectionInfo } from "../soroban";
 import { TallyBars } from "./VotePage";
 import { lookupAttestation, type Attestation } from "../registry";
 import { config } from "../config";
+import { PageHeader } from "@/components/PageHeader";
 
 /**
  * Public verification page. No wallet, no auth. Polls the contract
@@ -53,11 +54,12 @@ export function VerifyPage() {
 
   return (
     <>
-      <h1>Public verification</h1>
-      <p className="muted">
-        Anyone can look up any election ID here — no wallet, no login. The
-        numbers below come straight from the Soroban contract state.
-      </p>
+      <PageHeader
+        backTo="/participate"
+        backLabel="Participate"
+        title="Public verification"
+        subtitle="Anyone can look up any election ID here — no wallet, no login. The numbers below come straight from the Soroban contract state."
+      />
 
       <div className="card">
         <label>Election ID</label>
@@ -72,9 +74,18 @@ export function VerifyPage() {
 
       {err && <div className="error">{err}</div>}
 
-      {election && (
+      {election && (() => {
+        const meta = decodeElectionQuestion(election.question);
+        const displayTitle = meta.title || election.question;
+        const closedForResults = election.closed || Date.now() / 1000 >= election.closesAt;
+        return (
         <div className="card">
-          <h2>{election.question}</h2>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+            <h2 style={{ margin: 0 }}>{meta.name || displayTitle}</h2>
+          </div>
+          {meta.name && meta.title && (
+            <p className="muted" style={{ marginTop: 4 }}>{displayTitle}</p>
+          )}
           {attestation ? (
             <div className="verified-badge">
               <span className="verified-check">✓</span>
@@ -106,7 +117,7 @@ export function VerifyPage() {
           ) : null}
           <p className="muted">
             <span className="pill">Community #{election.communityId}</span>
-            {election.closed || Date.now() / 1000 >= election.closesAt ? (
+            {closedForResults ? (
               <span className="pill err">closed</span>
             ) : (
               <span className="pill ok">live</span>
@@ -120,9 +131,17 @@ export function VerifyPage() {
               </span>
             )}
           </p>
-          <TallyBars election={election} />
+          {closedForResults ? (
+            <TallyBars election={election} />
+          ) : (
+            <div className="muted" style={{ marginTop: 12, padding: 12, border: "1px dashed var(--border)", borderRadius: 8, textAlign: "center" }}>
+              Results are sealed until the deadline. Voting is still in progress — come back after{" "}
+              {new Date(election.closesAt * 1000).toLocaleString()}.
+            </div>
+          )}
         </div>
-      )}
+        );
+      })()}
     </>
   );
 }

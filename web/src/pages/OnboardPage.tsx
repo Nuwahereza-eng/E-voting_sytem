@@ -1,29 +1,56 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { bulkProvision, fetchMembers, type BridgeVoter } from "../bridge";
+import {
+  ArrowRight,
+  FileSpreadsheet,
+  FolderPlus,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
+import {
+  activateList,
+  bulkProvision,
+  createList,
+  deleteList,
+  deleteVoter,
+  fetchAllVoters,
+  fetchLists,
+  fetchMembers,
+  type BridgeVoter,
+  type EnrolledVoter,
+  type VoterList,
+} from "../bridge";
 import { config } from "../config";
+import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
+import { parseVoterCsv, parseVoterFile } from "@/lib/parseVoterFile";
 
-// A voter row the organiser is editing. Only `msisdn` is required.
+// A voter row the organiser is drafting.
+//   `msisdn`   — phone number (required)
+//   `idNumber` — student number, national ID, membership number, etc.
+//                Used as the stable identity across SIM changes. Two rows
+//                sharing an idNumber become aliases (one keypair, one vote).
 //   `name`     — local convenience label; not stored on the bridge.
-//   `voterRef` — a stable identity string (national ID, student number,
-//                SACCO membership number, ...). Two rows with the same
-//                voterRef become aliases: one keypair, one on-chain
-//                vote, but both phones can dial in.
 interface Row {
   name: string;
   msisdn: string;
-  voterRef: string;
+  idNumber: string;
 }
 
-const BLANK_ROW: Row = { name: "", msisdn: "", voterRef: "" };
+const BLANK_ROW: Row = { name: "", msisdn: "", idNumber: "" };
 
 export function OnboardPage() {
-  const [rows, setRows] = useState<Row[]>([
-    { name: "Alice", msisdn: "+256700000001", voterRef: "STU-2026-001" },
-    { name: "Bob", msisdn: "+256700000002", voterRef: "STU-2026-002" },
-    { name: "Carol", msisdn: "+256700000003", voterRef: "STU-2026-003" },
-  ]);
-  const [mode, setMode] = useState<"replace" | "append">("replace");
+  // ---- draft rows -------------------------------------------------------
+  const [rows, setRows] = useState<Row[]>([{ ...BLANK_ROW }]);
+  const [mode, setMode] = useState<"replace" | "append">("append");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<{
@@ -31,25 +58,128 @@ export function OnboardPage() {
     members: string[];
     assignments: BridgeVoter[];
   } | null>(null);
-  const [current, setCurrent] = useState<{ count: number; root: string } | null>(null);
-  // Progressive-disclosure toggles. Both start collapsed — organisers
-  // rarely need to see the raw bridge status or the per-phone assignment
-  // table unless something looks wrong, so we hide them by default.
-  const [showBridge, setShowBridge] = useState(false);
-  const [showAssignments, setShowAssignments] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    fetchMembers()
-      .then((m) => setCurrent({ count: m.count, root: m.root }))
-      .catch((e) =>
-        setErr(
-          `Cannot reach bridge at ${config.bridgeUrl} — start it with \`cd ussd-bridge && npm start\`. (${
-            e instanceof Error ? e.message : String(e)
-          })`,
-        ),
-      );
+  // ---- current active list membership summary --------------------------
+  const [current, setCurrent] = useState<{ count: number; root: string } | null>(null);
+
+  // ---- lists -----------------------------------------------------------
+  const [lists, setLists] = useState<VoterList[] | null>(null);
+  const [activeId, setActiveId] = useState<string>("");
+  const [showNewList, setShowNewList] = useState(false);
+  const [newListName, setNewListName] = useState("");
+  const [creatingList, setCreatingList] = useState(false);
+  const [confirmDeleteList, setConfirmDeleteList] = useState<VoterList | null>(null);
+
+  // ---- enrolled voters + selection --------------------------------------
+  const [enrolled, setEnrolled] = useState<EnrolledVoter[] | null>(null);
+  const [enrolledErr, setEnrolledErr] = useState<string | null>(null);
+  const [loadingEnrolled, setLoadingEnrolled] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmDeleteOne, setConfirmDeleteOne] = useState<EnrolledVoter | null>(null);
+  const [confirmDeleteMany, setConfirmDeleteMany] = useState(false);
+
+  const refreshLists = useCallback(async () => {
+    try {
+      const r = await fetchLists();
+      setLists(r.lists);
+      setActiveId(r.activeId);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
   }, []);
 
+  const refreshEnrolled = useCallback(async () => {
+    setLoadingEnrolled(true);
+    setEnrolledErr(null);
+    try {
+      const v = await fetchAllVoters();
+      setEnrolled(v);
+      setSelected(new Set());
+    } catch (e) {
+      setEnrolledErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoadingEnrolled(false);
+    }
+  }, []);
+
+  const refreshMembers = useCallback(async () => {
+    try {
+      const m = await fetchMembers();
+      setCurrent({ count: m.count, root: m.root });
+    } catch (e) {
+      setErr(
+        `Cannot reach bridge at ${config.bridgeUrl} — start it with \`cd ussd-bridge && npm start\`. (${
+          e instanceof Error ? e.message : String(e)
+        })`,
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshLists().catch(() => {});
+    refreshMembers().catch(() => {});
+    refreshEnrolled().catch(() => {});
+  }, [refreshLists, refreshMembers, refreshEnrolled]);
+
+  const activeList = useMemo(
+    () => lists?.find((l) => l.id === activeId) ?? null,
+    [lists, activeId],
+  );
+
+  async function switchList(id: string) {
+    if (id === activeId) return;
+    setBusy(true);
+    setErr(null);
+    setResult(null);
+    try {
+      await activateList(id);
+      setActiveId(id);
+      await Promise.all([refreshLists(), refreshMembers(), refreshEnrolled()]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitNewList() {
+    const name = newListName.trim();
+    if (!name) return;
+    setCreatingList(true);
+    setErr(null);
+    try {
+      const r = await createList(name, true);
+      setActiveId(r.activeId);
+      setNewListName("");
+      setShowNewList(false);
+      await Promise.all([refreshLists(), refreshMembers(), refreshEnrolled()]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCreatingList(false);
+    }
+  }
+
+  async function performDeleteList() {
+    if (!confirmDeleteList) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await deleteList(confirmDeleteList.id);
+      setActiveId(r.activeId);
+      setConfirmDeleteList(null);
+      await Promise.all([refreshLists(), refreshMembers(), refreshEnrolled()]);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // ---- draft-row helpers -----------------------------------------------
   function updateRow(i: number, patch: Partial<Row>) {
     setRows((prev) => prev.map((r, j) => (i === j ? { ...r, ...patch } : r)));
   }
@@ -57,32 +187,52 @@ export function OnboardPage() {
     setRows((prev) => [...prev, { ...BLANK_ROW }]);
   }
   function removeRow(i: number) {
-    setRows((prev) => prev.filter((_, j) => j !== i));
+    setRows((prev) => (prev.length === 1 ? [{ ...BLANK_ROW }] : prev.filter((_, j) => j !== i)));
+  }
+  function clearRows() {
+    setRows([{ ...BLANK_ROW }]);
   }
 
-  // Parse a pasted CSV / TSV / newline block. Accepted per-row formats:
-  //   "+2567..."                        (phone only)
-  //   "Name, +2567..."                  (name + phone)
-  //   "Name, +2567..., STU-2026-001"    (name + phone + voterRef)
-  //   "+2567..., STU-2026-001"          (phone + voterRef)
-  function pasteCsv(text: string) {
-    const parsed = text
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line): Row => {
-        const parts = line.split(/[,\t;]/).map((s) => s.trim());
-        if (parts.length === 1) {
-          return { name: "", msisdn: parts[0], voterRef: "" };
-        }
-        // Find whichever field looks like a phone (starts with `+` or a digit).
-        const phoneIdx = parts.findIndex((p) => /^[+\d]/.test(p));
-        const msisdn = phoneIdx >= 0 ? parts[phoneIdx] : "";
-        const rest = parts.filter((_, i) => i !== phoneIdx);
-        const [name = "", voterRef = ""] = rest;
-        return { name, msisdn, voterRef };
+  async function onFilePicked(file: File | null) {
+    if (!file) return;
+    setErr(null);
+    try {
+      const parsed = await parseVoterFile(file);
+      if (parsed.length === 0) {
+        setErr(`No voter rows found in ${file.name}. Expected columns: Name, Phone, ID number.`);
+        return;
+      }
+      setRows((prev) => {
+        const base =
+          prev.length === 1 && !prev[0].name && !prev[0].msisdn && !prev[0].idNumber ? [] : prev;
+        return [
+          ...base,
+          ...parsed.map((p) => ({ name: p.name, msisdn: p.msisdn, idNumber: p.voterRef })),
+        ];
       });
-    if (parsed.length > 0) setRows(parsed);
+    } catch (e) {
+      setErr(`Could not parse ${file.name}: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  function pasteCsv(text: string) {
+    if (!text.trim()) return;
+    try {
+      const parsed = parseVoterCsv(text);
+      if (parsed.length === 0) return;
+      setRows((prev) => {
+        const base =
+          prev.length === 1 && !prev[0].name && !prev[0].msisdn && !prev[0].idNumber ? [] : prev;
+        return [
+          ...base,
+          ...parsed.map((p) => ({ name: p.name, msisdn: p.msisdn, idNumber: p.voterRef })),
+        ];
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
   }
 
   async function provision() {
@@ -92,26 +242,38 @@ export function OnboardPage() {
       .map((r) => ({
         name: r.name.trim(),
         msisdn: r.msisdn.trim(),
-        voterRef: r.voterRef.trim(),
+        voterRef: r.idNumber.trim(),
       }))
       .filter((r) => r.msisdn.length > 0);
     if (valid.length === 0) {
       setErr("Add at least one voter with a phone number.");
       return;
     }
-    const seen = new Set<string>();
+    // Require an ID number for every voter — this is the identity that
+    // survives phone/SIM changes and dedupes across aliases.
+    const missingId = valid.findIndex((r) => !r.voterRef);
+    if (missingId >= 0) {
+      setErr(
+        `Row ${missingId + 1} is missing an ID number (student/national). Every voter needs one.`,
+      );
+      return;
+    }
+    const seenPhone = new Set<string>();
     for (const r of valid) {
-      if (seen.has(r.msisdn)) {
+      if (seenPhone.has(r.msisdn)) {
         setErr(`Duplicate phone number: ${r.msisdn}`);
         return;
       }
-      seen.add(r.msisdn);
+      seenPhone.add(r.msisdn);
     }
     setBusy(true);
     try {
       const res = await bulkProvision(valid, mode);
       setResult({ root: res.root, members: res.members, assignments: res.assignments });
       setCurrent({ count: res.total, root: res.root });
+      clearRows();
+      refreshEnrolled().catch(() => {});
+      refreshLists().catch(() => {});
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
@@ -119,275 +281,630 @@ export function OnboardPage() {
     }
   }
 
+  // ---- voter deletion (single + bulk) -----------------------------------
+  async function performDeleteOne() {
+    if (!confirmDeleteOne) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const r = await deleteVoter(confirmDeleteOne.msisdn);
+      setCurrent({ count: r.total, root: r.root });
+      setConfirmDeleteOne(null);
+      await refreshEnrolled();
+      await refreshLists();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function performDeleteMany() {
+    if (selected.size === 0) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      // Delete sequentially so the bridge sees each removal in isolation
+      // (safer than trusting concurrent slot-compaction).
+      let last: { count: number; root: string } | null = null;
+      for (const msisdn of Array.from(selected)) {
+        const r = await deleteVoter(msisdn);
+        last = { count: r.total, root: r.root };
+      }
+      if (last) setCurrent(last);
+      setSelected(new Set());
+      setConfirmDeleteMany(false);
+      await refreshEnrolled();
+      await refreshLists();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const filtered = useMemo(() => {
+    if (!enrolled) return [];
+    const q = search.trim().toLowerCase();
+    if (!q) return enrolled;
+    return enrolled.filter(
+      (v) =>
+        v.msisdn.toLowerCase().includes(q) ||
+        (v.voterRef ?? "").toLowerCase().includes(q) ||
+        v.publicKey.toLowerCase().includes(q) ||
+        String(v.memberIndex).includes(q),
+    );
+  }, [enrolled, search]);
+
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((v) => selected.has(v.msisdn));
+
+  function toggleAllFiltered() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        for (const v of filtered) next.delete(v.msisdn);
+      } else {
+        for (const v of filtered) next.add(v.msisdn);
+      }
+      return next;
+    });
+  }
+
+  function toggleOne(msisdn: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(msisdn)) next.delete(msisdn);
+      else next.add(msisdn);
+      return next;
+    });
+  }
+
+  const draftCount = rows.filter((r) => r.msisdn.trim()).length;
+
   return (
     <>
-      <div className="page-header">
-        <div>
-          <h1>Enrol voters</h1>
-          <p className="muted">
-            Add voters by phone. The bridge generates a custodial Stellar
-            keypair per voter so they can vote via USSD or SMS — no wallet
-            required.
-          </p>
+      <PageHeader
+        backTo="/organise"
+        backLabel="Organise"
+        title="Enrol voters"
+        subtitle="Organise voters into named lists. Each voter needs an ID (student number, national ID, membership number) plus a phone. The ID is their real identity — a lost SIM never loses their vote."
+      />
+
+      {err && (
+        <div className="mb-4 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <span className="flex-1">{err}</span>
+          <button
+            className="text-destructive/70 hover:text-destructive"
+            onClick={() => setErr(null)}
+            aria-label="Dismiss"
+          >
+            <X className="size-4" />
+          </button>
         </div>
-        <Link to="/admin" className="back-link">← Back</Link>
-      </div>
+      )}
 
-      {err && <div className="error">{err}</div>}
+      {/* -------- Working list -------- */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <CardTitle className="text-base">Working list</CardTitle>
+              <CardDescription>
+                Every action below affects this list only. Use separate lists for separate
+                communities (e.g. a class, a SACCO, a village council).
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setNewListName("");
+                setShowNewList(true);
+              }}
+            >
+              <FolderPlus className="size-4" />
+              New list
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="flex flex-wrap items-center gap-3">
+          {lists ? (
+            <>
+              <label htmlFor="list-picker" className="text-sm text-muted-foreground">
+                List:
+              </label>
+              <select
+                id="list-picker"
+                value={activeId}
+                onChange={(e) => switchList(e.target.value)}
+                disabled={busy}
+                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                {lists.map((l) => (
+                  <option key={l.id} value={l.id}>
+                    {l.name} · {l.memberCount} voter{l.memberCount === 1 ? "" : "s"}
+                  </option>
+                ))}
+              </select>
+              {activeList && (
+                <Badge variant="secondary">
+                  {activeList.memberCount} voter{activeList.memberCount === 1 ? "" : "s"}
+                </Badge>
+              )}
+              {activeList && lists.length > 1 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => setConfirmDeleteList(activeList)}
+                >
+                  <Trash2 className="size-4" />
+                  Delete list
+                </Button>
+              )}
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              <Loader2 className="mr-1 inline size-3.5 animate-spin" />
+              Loading lists…
+            </span>
+          )}
+        </CardContent>
+      </Card>
 
-      {/* Bridge status is a tiny inline chip by default. The full details
-          (URL + Merkle root) are collapsed behind a toggle. */}
-      <div className="card status-card">
-        <div className="status-row">
+      {/* Bridge status chip */}
+      <Card className="mb-4">
+        <CardContent className="flex flex-wrap items-center gap-3 py-3 text-sm">
           {current ? (
             <>
-              <span className="pill ok">Bridge online</span>
-              <span className="muted">
-                {current.count} voter{current.count === 1 ? "" : "s"} enrolled
+              <Badge variant="success">Bridge online</Badge>
+              <span className="text-muted-foreground">
+                <b className="text-foreground">{current.count}</b> voter
+                {current.count === 1 ? "" : "s"} in{" "}
+                <b className="text-foreground">{activeList?.name ?? "…"}</b>
               </span>
             </>
           ) : (
-            <span className="muted">Checking bridge at {config.bridgeUrl}…</span>
+            <span className="text-muted-foreground">
+              <Loader2 className="mr-1 inline size-3.5 animate-spin" />
+              Contacting bridge at <span className="font-mono text-xs">{config.bridgeUrl}</span>…
+            </span>
           )}
-          {current && (
-            <button
-              className="secondary link-button"
-              onClick={() => setShowBridge((v) => !v)}
-              style={{ marginLeft: "auto" }}
-            >
-              {showBridge ? "Hide details" : "Show details"}
-            </button>
-          )}
-        </div>
-        {showBridge && current && (
-          <div style={{ marginTop: 10 }}>
-            <div className="muted small">Bridge URL</div>
-            <div className="mono small">{config.bridgeUrl}</div>
-            <div className="muted small" style={{ marginTop: 6 }}>
-              Merkle root
-            </div>
-            <div className="mono small">{current.root || "(no members yet)"}</div>
-          </div>
-        )}
-      </div>
+          <span className="ml-auto font-mono text-xs text-muted-foreground/80" title={current?.root}>
+            {current?.root
+              ? `root ${current.root.slice(0, 10)}…${current.root.slice(-6)}`
+              : ""}
+          </span>
+        </CardContent>
+      </Card>
 
-      <div className="card">
-        <h2>1. Voter list</h2>
-        <p className="muted" style={{ fontSize: 13 }}>
-          One row per phone. If a voter has more than one number, put each
-          on its own row and use the <b>same voter ref</b> on both — the
-          bridge binds both phones to a single keypair so they vote once.
-        </p>
+      {/* -------- Add voters -------- */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">
+            Add voters {activeList && <span className="text-muted-foreground">to {activeList.name}</span>}
+          </CardTitle>
+          <CardDescription>
+            Import a spreadsheet, paste a CSV, or type rows below. Every voter needs an{" "}
+            <b>ID number</b> (student, national, or membership). Two rows sharing the same ID
+            become aliases — one person, two SIMs, one vote.
+          </CardDescription>
+        </CardHeader>
 
-        <details style={{ margin: "8px 0 12px" }}>
-          <summary className="muted" style={{ cursor: "pointer" }}>
-            Or paste a CSV block
-          </summary>
-          <textarea
-            placeholder={"Alice,+256700000001,STU-2026-001\nBob,+256700000002,STU-2026-002"}
-            onBlur={(e) => pasteCsv(e.target.value)}
-            style={{ marginTop: 8 }}
-          />
-        </details>
-
-        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-          <thead>
-            <tr>
-              <th style={th}>#</th>
-              <th style={th}>Name (optional)</th>
-              <th style={th}>Phone (E.164)</th>
-              <th style={th}>Voter ref (recommended)</th>
-              <th style={th}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td style={td} className="muted">
-                  {i + 1}
-                </td>
-                <td style={td}>
-                  <input
-                    value={r.name}
-                    onChange={(e) => updateRow(i, { name: e.target.value })}
-                    placeholder="Alice"
-                  />
-                </td>
-                <td style={td}>
-                  <input
-                    value={r.msisdn}
-                    onChange={(e) => updateRow(i, { msisdn: e.target.value })}
-                    placeholder="+2567..."
-                  />
-                </td>
-                <td style={td}>
-                  <input
-                    value={r.voterRef}
-                    onChange={(e) => updateRow(i, { voterRef: e.target.value })}
-                    placeholder="STU-2026-001"
-                  />
-                </td>
-                <td style={td}>
-                  <button
-                    className="secondary"
-                    onClick={() => removeRow(i)}
-                    style={{ padding: "6px 10px" }}
-                  >
-                    ×
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <button className="secondary" onClick={addRow} style={{ marginTop: 10 }}>
-          + Add voter
-        </button>
-      </div>
-
-      <div className="card">
-        <h2>2. Provision</h2>
-        <label>Mode</label>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          <label style={rowLabel}>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="size-4" />
+              Import file
+            </Button>
             <input
-              type="radio"
-              checked={mode === "replace"}
-              onChange={() => setMode("replace")}
-              style={{ width: "auto" }}
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+              className="hidden"
+              onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)}
             />
-            Replace — start a fresh community
-          </label>
-          <label style={rowLabel}>
-            <input
-              type="radio"
-              checked={mode === "append"}
-              onChange={() => setMode("append")}
-              style={{ width: "auto" }}
-            />
-            Append — add to existing list
-          </label>
-        </div>
-
-        <div style={{ marginTop: 12 }}>
-          <button onClick={provision} disabled={busy || !current}>
-            {busy ? "Provisioning..." : `Provision ${rows.filter((r) => r.msisdn.trim()).length} voter(s)`}
-          </button>
-        </div>
-
-        {result && (
-          <div className="ok-box" style={{ marginTop: 16 }}>
-            <div>
-              <b>{result.assignments.length}</b> phone binding(s) processed —{" "}
-              <b>{result.members.length}</b> unique voter(s) in the community.
-              {result.assignments.filter((a) => a.alias).length > 0 && (
-                <>
-                  {" "}
-                  <span className="muted">
-                    ({result.assignments.filter((a) => a.alias).length} were
-                    additional phones for an already-listed voter.)
-                  </span>
-                </>
-              )}
-            </div>
-            <div style={{ marginTop: 8 }}>
-              Merkle root: <span className="mono">{result.root}</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {result && (
-        <div className="card">
-          <div className="row" style={{ alignItems: "center" }}>
-            <h2 style={{ margin: 0 }}>3. Confirm assignments</h2>
+            <span className="text-xs text-muted-foreground">
+              Excel (.xlsx, .xls) or CSV. First row can be headers: <i>Name, Phone, ID Number</i>.
+            </span>
             <button
-              className="secondary link-button"
-              onClick={() => setShowAssignments((v) => !v)}
-              style={{ marginLeft: "auto" }}
+              type="button"
+              className="ml-auto text-xs text-accent underline-offset-2 hover:underline"
+              onClick={() => setShowImport((v) => !v)}
             >
-              {showAssignments ? "Hide table" : "Show table"}
+              {showImport ? "Hide paste box" : "Paste CSV instead"}
             </button>
           </div>
-          {showAssignments && (
-            <>
-              <p className="muted" style={{ fontSize: 13 }}>
-                Rows tagged <span className="pill">alias</span> are additional
-                phones bound to the same voter (same voter ref) — they share
-                one keypair and vote once.
-              </p>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr>
-                    <th style={th}>Member #</th>
-                    <th style={th}>Name</th>
-                    <th style={th}>Phone</th>
-                    <th style={th}>Voter ref</th>
-                    <th style={th}>Public key</th>
-                    <th style={th}></th>
+
+          {showImport && (
+            <textarea
+              placeholder={"Alice,+256700000001,STU-2026-001\nBob,+256700000002,STU-2026-002"}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+              rows={4}
+              onBlur={(e) => {
+                pasteCsv(e.target.value);
+                e.target.value = "";
+              }}
+            />
+          )}
+
+          <div className="overflow-x-auto rounded-md border border-border/70">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">#</th>
+                  <th className="px-3 py-2 text-left font-medium">Name (optional)</th>
+                  <th className="px-3 py-2 text-left font-medium">
+                    ID number <span className="text-destructive">*</span>
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium">
+                    Phone (E.164) <span className="text-destructive">*</span>
+                  </th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, i) => (
+                  <tr key={i} className="border-t border-border/60">
+                    <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={r.name}
+                        onChange={(e) => updateRow(i, { name: e.target.value })}
+                        placeholder="Alice"
+                        className="w-full rounded-md border border-input bg-background px-2 py-1"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={r.idNumber}
+                        onChange={(e) => updateRow(i, { idNumber: e.target.value })}
+                        placeholder="STU-2026-001 or CM-99887766"
+                        className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        value={r.msisdn}
+                        onChange={(e) => updateRow(i, { msisdn: e.target.value })}
+                        placeholder="+2567..."
+                        className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono"
+                      />
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <button
+                        type="button"
+                        onClick={() => removeRow(i)}
+                        className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        aria-label="Remove row"
+                      >
+                        <Trash2 className="size-4" />
+                      </button>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {result.assignments.map((a) => (
-                    <tr key={a.msisdn}>
-                      <td style={td}>{a.memberIndex}</td>
-                      <td style={td}>{a.name || <span className="muted">—</span>}</td>
-                      <td style={td} className="mono">
-                        {a.msisdn}
-                      </td>
-                      <td style={td} className="mono">
-                        {a.voterRef || <span className="muted">—</span>}
-                      </td>
-                      <td style={td} className="mono" title={a.publicKey}>
-                        {a.publicKey.slice(0, 6)}…{a.publicKey.slice(-6)}
-                      </td>
-                      <td style={td}>
-                        {a.alias && <span className="pill">alias</span>}
-                      </td>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" size="sm" onClick={addRow}>
+              <Plus className="size-4" />
+              Add row
+            </Button>
+            {rows.some((r) => r.msisdn || r.name || r.idNumber) && (
+              <Button variant="ghost" size="sm" onClick={clearRows}>
+                Clear draft
+              </Button>
+            )}
+            <span className="ml-auto text-xs text-muted-foreground">
+              {draftCount} voter{draftCount === 1 ? "" : "s"} ready to provision
+            </span>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-4 border-t border-border/60 pt-4">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  checked={mode === "append"}
+                  onChange={() => setMode("append")}
+                />
+                Append to this list
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="radio"
+                  checked={mode === "replace"}
+                  onChange={() => setMode("replace")}
+                />
+                Replace this list
+              </label>
+            </div>
+            <Button
+              className="ml-auto"
+              onClick={provision}
+              disabled={busy || !current || draftCount === 0}
+            >
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              {busy ? "Provisioning..." : `Provision ${draftCount} voter${draftCount === 1 ? "" : "s"}`}
+            </Button>
+          </div>
+
+          {result && (
+            <div className="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
+              <div>
+                <b>{result.assignments.length}</b> phone binding
+                {result.assignments.length === 1 ? "" : "s"} processed —{" "}
+                <b>{result.members.length}</b> unique voter
+                {result.members.length === 1 ? "" : "s"} in {activeList?.name ?? "this list"}.
+                {result.assignments.filter((a) => a.alias).length > 0 && (
+                  <>
+                    {" "}
+                    <span className="opacity-80">
+                      ({result.assignments.filter((a) => a.alias).length} were additional phones for
+                      an already-listed voter.)
+                    </span>
+                  </>
+                )}
+              </div>
+              <div className="mt-1 font-mono text-xs opacity-80">
+                Merkle root: {result.root.slice(0, 12)}…{result.root.slice(-8)}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* -------- Enrolled voters -------- */}
+      <Card className="mb-6">
+        <CardHeader>
+          <div className="flex flex-wrap items-center gap-3">
+            <div>
+              <CardTitle className="text-base">
+                Enrolled voters {activeList && <span className="text-muted-foreground">· {activeList.name}</span>}
+              </CardTitle>
+              <CardDescription>
+                {enrolled ? (
+                  <>
+                    {enrolled.length} voter{enrolled.length === 1 ? "" : "s"} in this list. Removing
+                    a voter regenerates the Merkle root — remember to re-register the community.
+                  </>
+                ) : (
+                  <>Loading current voter list…</>
+                )}
+              </CardDescription>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              onClick={refreshEnrolled}
+              disabled={loadingEnrolled}
+            >
+              <RefreshCw className={`size-4 ${loadingEnrolled ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-3">
+          {enrolledErr && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {enrolledErr}
+            </div>
+          )}
+
+          {enrolled && enrolled.length > 0 && (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Search phone, ID number, or public key…"
+                    className="w-full rounded-md border border-input bg-background py-2 pl-9 pr-3 text-sm"
+                  />
+                </div>
+                {selected.size > 0 && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => setConfirmDeleteMany(true)}
+                    disabled={busy}
+                  >
+                    <Trash2 className="size-4" />
+                    Remove {selected.size}
+                  </Button>
+                )}
+              </div>
+
+              <div className="overflow-x-auto rounded-md border border-border/70">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/30 text-xs uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="w-10 px-3 py-2 text-left">
+                        <input
+                          type="checkbox"
+                          checked={allFilteredSelected}
+                          onChange={toggleAllFiltered}
+                          aria-label="Select all"
+                        />
+                      </th>
+                      <th className="px-3 py-2 text-left font-medium">#</th>
+                      <th className="px-3 py-2 text-left font-medium">ID number</th>
+                      <th className="px-3 py-2 text-left font-medium">Phone</th>
+                      <th className="px-3 py-2 text-left font-medium">Public key</th>
+                      <th className="px-3 py-2"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filtered.map((v) => (
+                      <tr
+                        key={v.msisdn}
+                        className={`border-t border-border/60 ${
+                          selected.has(v.msisdn) ? "bg-primary/5" : ""
+                        }`}
+                      >
+                        <td className="px-3 py-2">
+                          <input
+                            type="checkbox"
+                            checked={selected.has(v.msisdn)}
+                            onChange={() => toggleOne(v.msisdn)}
+                            aria-label={`Select ${v.msisdn}`}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{v.memberIndex}</td>
+                        <td className="px-3 py-2 font-mono">
+                          {v.voterRef || <span className="text-muted-foreground">—</span>}
+                        </td>
+                        <td className="px-3 py-2 font-mono">{v.msisdn}</td>
+                        <td className="px-3 py-2 font-mono text-xs" title={v.publicKey}>
+                          {v.publicKey.slice(0, 6)}…{v.publicKey.slice(-6)}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteOne(v)}
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                            aria-label={`Remove ${v.msisdn}`}
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {filtered.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-3 py-4 text-center text-sm text-muted-foreground">
+                          No voters match “{search}”.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </>
           )}
-        </div>
-      )}
+
+          {enrolled && enrolled.length === 0 && !loadingEnrolled && (
+            <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
+              <FileSpreadsheet className="size-8 opacity-40" />
+              <div>
+                No voters in {activeList?.name ?? "this list"} yet. Import a spreadsheet or add rows
+                above to get started.
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {result && (
-        <div className="card">
-          <h2>Next: register on-chain</h2>
-          <p className="muted">
-            The list lives on the bridge. To make it verifiable, commit the
-            Merkle root to Soroban. The Community page pulls this list for
-            you.
-          </p>
-          <Link to="/admin/community">
-            <button>Register community →</button>
-          </Link>
-        </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Next: register on-chain</CardTitle>
+            <CardDescription>
+              The list lives on the bridge. To make it verifiable, commit the Merkle root to
+              Soroban.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link to="/community">
+                Register community <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
       )}
+
+      {/* ---- New list dialog ---- */}
+      <Dialog
+        open={showNewList}
+        onClose={() => setShowNewList(false)}
+        title="Create a new list"
+        description="Give the list a memorable name — a class year, a SACCO chapter, a village. You can switch between lists at any time."
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitNewList();
+          }}
+          className="space-y-4"
+        >
+          <div>
+            <label className="mb-1 block text-sm font-medium">List name</label>
+            <input
+              type="text"
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              placeholder="e.g. Class of 2026"
+              autoFocus
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setShowNewList(false)}
+              disabled={creatingList}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={creatingList || !newListName.trim()}>
+              {creatingList && <Loader2 className="size-4 animate-spin" />}
+              Create list
+            </Button>
+          </div>
+        </form>
+      </Dialog>
+
+      {/* ---- Delete list confirm ---- */}
+      <ConfirmDialog
+        open={!!confirmDeleteList}
+        onClose={() => setConfirmDeleteList(null)}
+        onConfirm={performDeleteList}
+        title={`Delete "${confirmDeleteList?.name ?? ""}"?`}
+        description={`All ${confirmDeleteList?.memberCount ?? 0} voter${
+          confirmDeleteList?.memberCount === 1 ? "" : "s"
+        } in this list will be permanently removed from the bridge. On-chain votes already cast are not affected. This can't be undone.`}
+        confirmLabel="Delete list"
+        busy={busy}
+      />
+
+      {/* ---- Delete single voter confirm ---- */}
+      <ConfirmDialog
+        open={!!confirmDeleteOne}
+        onClose={() => setConfirmDeleteOne(null)}
+        onConfirm={performDeleteOne}
+        title="Remove this voter?"
+        description={
+          confirmDeleteOne
+            ? `Remove ${confirmDeleteOne.msisdn}${
+                confirmDeleteOne.voterRef ? ` (${confirmDeleteOne.voterRef})` : ""
+              } from ${activeList?.name ?? "the list"}. The community must be re-registered on-chain before the next ballot.`
+            : ""
+        }
+        confirmLabel="Remove voter"
+        busy={busy}
+      />
+
+      {/* ---- Delete many voters confirm ---- */}
+      <ConfirmDialog
+        open={confirmDeleteMany}
+        onClose={() => setConfirmDeleteMany(false)}
+        onConfirm={performDeleteMany}
+        title={`Remove ${selected.size} voter${selected.size === 1 ? "" : "s"}?`}
+        description={`This removes the selected voter${
+          selected.size === 1 ? "" : "s"
+        } from ${activeList?.name ?? "the list"}. The community must be re-registered on-chain before the next ballot.`}
+        confirmLabel={`Remove ${selected.size}`}
+        busy={busy}
+      />
     </>
   );
 }
-
-const th: React.CSSProperties = {
-  textAlign: "left",
-  padding: "8px 6px",
-  borderBottom: "1px solid var(--border)",
-  color: "var(--muted)",
-  fontWeight: 500,
-  fontSize: 13,
-};
-const td: React.CSSProperties = {
-  padding: "6px 6px",
-  borderBottom: "1px solid var(--border)",
-  verticalAlign: "middle",
-};
-const rowLabel: React.CSSProperties = {
-  display: "flex",
-  alignItems: "center",
-  gap: 6,
-  color: "var(--text)",
-  margin: 0,
-  fontSize: 14,
-};

@@ -9,7 +9,7 @@ export const config = {
   networkPassphrase:
     import.meta.env.VITE_NETWORK_PASSPHRASE ??
     "Test SDF Network ; September 2015",
-  /** Base URL of the USSD/SMS bridge (Onboard & voter status use this). */
+  /** Base URL of the voter bridge (voter enrolment, status lookup, and phone-based voting). */
   bridgeUrl: (import.meta.env.VITE_BRIDGE_URL ?? "http://localhost:4000").replace(/\/$/, ""),
   /** Optional: comma-separated G... keys of members (demo bootstrap). */
   demoMembers: (import.meta.env.VITE_DEMO_MEMBERS ?? "")

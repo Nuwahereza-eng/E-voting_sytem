@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
 
 // Vite config for the Sauti web frontend. We polyfill `global` and
 // `Buffer` because @stellar/stellar-sdk expects them in the browser.
@@ -19,6 +20,9 @@ export default defineConfig({
   resolve: {
     alias: {
       buffer: "buffer/",
+      // Matches tsconfig `paths` — lets components import primitives as
+      // `@/components/ui/button` regardless of how deep they live.
+      "@": path.resolve(__dirname, "src"),
     },
   },
   optimizeDeps: {

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchVoterStatus, linkPhone, type BridgeStatus } from "../bridge";
+import { PageHeader } from "@/components/PageHeader";
 
 // A voter (or an admin acting on their behalf) types their phone number
 // and gets back a "yes you're enrolled" or "no you're not" answer, with
@@ -67,12 +68,12 @@ export function MyStatusPage() {
 
   return (
     <>
-      <h1>Am I enrolled?</h1>
-      <p className="muted">
-        Enter the phone number you gave your community organiser. If it's on
-        the enrolled list you'll see your assigned member number — no wallet
-        or app install required.
-      </p>
+      <PageHeader
+        backTo="/participate"
+        backLabel="Participate"
+        title="Am I enrolled?"
+        subtitle="Enter the phone number you gave your community organiser. If it's on the roll you'll see your assigned member number — no wallet or app install required."
+      />
 
       {err && <div className="error">{err}</div>}
 
@@ -117,7 +118,7 @@ export function MyStatusPage() {
           {status.aliases && status.aliases.length > 1 && (
             <div className="ok-box" style={{ fontSize: 13 }}>
               <b>{status.aliases.length} phones</b> are linked to this voter —
-              you can dial from any of them and it still counts as one vote.
+              any of them can be used to vote and it still counts as one vote.
               <ul className="mono" style={{ margin: "6px 0 0", paddingLeft: 20 }}>
                 {status.aliases.map((p) => (
                   <li key={p}>
@@ -128,18 +129,21 @@ export function MyStatusPage() {
                   </li>
                 ))}
               </ul>
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Any of these numbers works to vote — you'll only be counted once.
+              </p>
             </div>
           )}
 
           <p className="muted" style={{ fontSize: 13, marginTop: 12 }}>
-            To vote, dial the USSD code your organiser gave you (e.g.{" "}
-            <span className="mono">*384*12345#</span>), or send{" "}
-            <span className="mono">VOTE &lt;electionId&gt; &lt;option&gt;</span> via SMS.
+            To vote, go to the <Link to="/vote">Vote page</Link>, pick the "Phone" tab, enter
+            this number and the election ID your organiser shared. The bridge signs on your
+            behalf using your custodial key — no wallet install needed.
           </p>
           <p className="muted" style={{ fontSize: 13 }}>
-            Prefer to vote from a wallet you control? See the{" "}
-            <Link to="/vote">Vote page</Link> and connect Freighter with a
-            wallet whose public key matches your enrolment above.
+            Prefer to vote from a wallet you control? Use the same{" "}
+            <Link to="/vote">Vote page</Link> and switch to the "Wallet" tab, then connect
+            Freighter with a wallet whose public key matches your enrolment above.
           </p>
 
           <hr style={{ margin: "18px 0", borderColor: "var(--border)" }} />

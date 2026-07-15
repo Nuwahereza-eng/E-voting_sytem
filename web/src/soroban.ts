@@ -5,8 +5,10 @@
 // `submitVote`, `readElection`) so the UI never touches raw XDR.
 
 import {
+  Account,
   BASE_FEE,
   Contract,
+  Keypair,
   Networks,
   Address,
   nativeToScVal,
@@ -31,15 +33,12 @@ function passphrase(): string {
 // ---------- read-only calls (simulate, don't submit) ---------------------
 
 async function simulateRead(op: xdr.Operation): Promise<xdr.ScVal> {
-  // For read-only calls we still need an account (source) — use the
-  // system dummy account. Simulation does not require a real signer.
-  const dummy = "GA7QYNF7SOWQ3GLR2BGMZEHXAVIRZA4KVWLTJJFC7MGXUA74P7UJUWDA";
-  const account = await server.getAccount(dummy).catch(async () => {
-    // Fallback: build a fresh Account object at seq=0 for pure simulation
-    return { accountId: () => dummy, sequenceNumber: () => "0", incrementSequenceNumber: () => {} } as unknown as Awaited<
-      ReturnType<typeof server.getAccount>
-    >;
-  });
+  // Simulation needs *some* source account to build a valid tx envelope,
+  // but does not care whether the account exists on-chain or has funds.
+  // A fresh random keypair sidesteps a) the network round-trip to
+  // getAccount, and b) any risk of a hand-typed strkey with a bad
+  // checksum blowing up the very first read the app does.
+  const account = new Account(Keypair.random().publicKey(), "0");
   const tx = new TransactionBuilder(account, {
     fee: BASE_FEE,
     networkPassphrase: passphrase(),
@@ -62,6 +61,10 @@ export interface ElectionInfo {
   id: number;
   communityId: number;
   question: string;
+  /** Parsed name/symbol/title extracted from `question`. When the raw
+   *  `question` is a plain (legacy) string it becomes `title` and the
+   *  other two default to empty. */
+  meta: ElectionMeta;
   options: string[];
   opensAt: number;
   closesAt: number;
@@ -72,6 +75,85 @@ export interface ElectionInfo {
   bond: bigint;
   /** True once close_election has refunded the bond to the community admin. */
   bondReturned: boolean;
+}
+
+/** Structured election metadata packed into the on-chain `question`
+ *  field. Doing this off-chain-in-a-string keeps us backwards
+ *  compatible with the existing contract (no redeploy) while giving
+ *  organisers clearly-labelled inputs. */
+export interface ElectionMeta {
+  /** Long-form name of the ballot — e.g. "Kampala SACCO — 2026 Chair". */
+  name: string;
+  /** The literal question voters are answering — e.g. "Who leads the SACCO in 2026?". */
+  title: string;
+}
+
+/** Pack the two fields into a compact JSON blob that fits comfortably
+ *  under the Soroban String field limit. Keys are short (`n`/`t`)
+ *  to save bytes on chain. */
+export function encodeElectionQuestion(m: ElectionMeta): string {
+  return JSON.stringify({ n: m.name, t: m.title });
+}
+
+/** Best-effort inverse of `encodeElectionQuestion`. Falls back to
+ *  treating `raw` as a plain title so any pre-encoding elections still
+ *  render sensibly. */
+export function decodeElectionQuestion(raw: string): ElectionMeta {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const p = JSON.parse(trimmed) as { n?: unknown; t?: unknown; s?: unknown };
+      if (p && (typeof p.n === "string" || typeof p.t === "string")) {
+        return {
+          name: typeof p.n === "string" ? p.n : "",
+          title: typeof p.t === "string" ? p.t : "",
+        };
+      }
+    } catch {
+      /* fall through — treat as plain title */
+    }
+  }
+  return { name: "", title: raw };
+}
+
+/** Per-candidate metadata packed into each on-chain option string.
+ *  On paper ballots in East Africa candidates commonly carry a
+ *  picture-symbol (umbrella, watch, bicycle) so voters who don't read
+ *  fluently can still pick their person confidently. We keep that
+ *  idea: each option is `{ label, symbol }`. */
+export interface OptionMeta {
+  /** Candidate name / choice label — e.g. "Alice Nakato". */
+  label: string;
+  /** Short symbol / emoji / party mark — e.g. "☂ Umbrella", "Watch". */
+  symbol: string;
+}
+
+/** Encode an option as JSON keyed `l`/`s`. Plain-label options (no
+ *  symbol) stay as bare strings so we don't waste on-chain bytes. */
+export function encodeOption(o: OptionMeta): string {
+  const label = o.label.trim();
+  const symbol = o.symbol.trim();
+  if (!symbol) return label;
+  return JSON.stringify({ l: label, s: symbol });
+}
+
+/** Best-effort inverse of `encodeOption`. */
+export function decodeOption(raw: string): OptionMeta {
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const p = JSON.parse(trimmed) as { l?: unknown; s?: unknown };
+      if (p && (typeof p.l === "string" || typeof p.s === "string")) {
+        return {
+          label: typeof p.l === "string" ? p.l : "",
+          symbol: typeof p.s === "string" ? p.s : "",
+        };
+      }
+    } catch {
+      /* fall through — treat as plain label */
+    }
+  }
+  return { label: raw, symbol: "" };
 }
 
 export interface CommunityInfo {
@@ -126,6 +208,7 @@ export async function readElection(id: number): Promise<ElectionInfo> {
     id,
     communityId: Number(native.community_id),
     question: native.question,
+    meta: decodeElectionQuestion(native.question),
     options: native.options,
     opensAt: Number(native.opens_at),
     closesAt: Number(native.closes_at),
@@ -227,6 +310,31 @@ export async function registerCommunity(
   );
   const result = await submit(admin, op, sign);
   return Number(scValToNative(result.returnValue!));
+}
+
+/** Replace the on-chain member set for `communityId`. Only the
+ *  community's admin can call this. Use after enrolling/removing
+ *  voters so that new proofs verify — otherwise vote() will reject
+ *  with Error #7 (InvalidProof). Returns the tx hash. */
+export async function updateMembers(
+  admin: string,
+  communityId: number,
+  merkleRootHex: string,
+  memberCount: number,
+  sign: SignFn,
+): Promise<string> {
+  const root = Buffer.from(
+    merkleRootHex.startsWith("0x") ? merkleRootHex.slice(2) : merkleRootHex,
+    "hex",
+  );
+  const op = contract().call(
+    "update_members",
+    nativeToScVal(communityId, { type: "u32" }),
+    nativeToScVal(root, { type: "bytes" }),
+    nativeToScVal(memberCount, { type: "u32" }),
+  );
+  const result = await submit(admin, op, sign);
+  return result.txHash ?? "(unknown)";
 }
 
 export async function createElection(
