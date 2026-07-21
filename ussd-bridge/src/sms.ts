@@ -69,13 +69,22 @@ export async function sendSms(to: string, body: string): Promise<SmsResult> {
     }
     // AT response shape: { SMSMessageData: { Message, Recipients: [{ status, cost, messageId }] } }
     const rec = ((json as any)?.SMSMessageData?.Recipients ?? [])[0] ?? {};
+    const okStatus = rec.status === "Success" || rec.status === "Sent";
+    // Always log the per-recipient status so silent AT filtering
+    // (unapproved sender IDs, sandbox-only account, blacklisted
+    // numbers) is visible from the bridge terminal.
+    // eslint-disable-next-line no-console
+    console.log(
+      `[sms:at] to=${to} status=${rec.status ?? "?"} messageId=${rec.messageId ?? "-"} cost=${rec.cost ?? "-"}`,
+    );
     return {
-      ok: rec.status === "Success" || rec.status === "Sent",
+      ok: okStatus,
       devMode: false,
       provider: "africastalking",
       status: rec.status,
       cost: rec.cost,
       messageId: rec.messageId,
+      error: okStatus ? undefined : `AT status: ${rec.status ?? "unknown"}`,
     };
   } catch (e) {
     return {

@@ -125,6 +125,13 @@ interface IdSessionState {
   sentTo: string[];
   expiresAt: number;
   devCode?: string;
+  providerStatuses?: Array<{
+    to: string;
+    ok: boolean;
+    provider: string;
+    status?: string;
+    error?: string;
+  }>;
 }
 
 // ---- Wizard state persistence --------------------------------------
@@ -288,6 +295,7 @@ function IdVote({
         sentTo: r.sentTo,
         expiresAt: r.expiresAt,
         devCode: r.devCode,
+        providerStatuses: r.providerStatuses,
       });
       setLastSentAt(Date.now());
       if (!isResend) {
@@ -449,6 +457,21 @@ function IdVote({
               <div className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground/80">
                 Dev mode — code:{" "}
                 <span className="font-mono text-foreground">{session.devCode}</span>
+              </div>
+            )}
+            {session.providerStatuses && session.providerStatuses.some((s) => !s.ok) && (
+              <div className="space-y-1 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-foreground/80">
+                <div className="font-semibold">SMS not confirmed by provider.</div>
+                <ul className="list-disc pl-4">
+                  {session.providerStatuses.map((s, i) => (
+                    <li key={i}>
+                      {s.to}: {s.ok ? "sent" : s.status || s.error || "failed"}
+                    </li>
+                  ))}
+                </ul>
+                <div className="text-muted-foreground">
+                  Common causes: Africa's Talking sandbox account, unapproved sender ID, or the phone is not on the sandbox test list.
+                </div>
               </div>
             )}
             <input

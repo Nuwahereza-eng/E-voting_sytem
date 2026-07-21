@@ -269,6 +269,13 @@ export interface OtpRequestResult {
   expiresAt: number;
   devMode: boolean;
   devCode?: string; // only returned when the bridge has no SMS credentials
+  providerStatuses?: Array<{
+    to: string;
+    ok: boolean;
+    provider: string;
+    status?: string;
+    error?: string;
+  }>;
   error?: string;
 }
 

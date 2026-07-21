@@ -891,11 +891,19 @@ app.post("/otp/request", async (req: Request, res: Response) => {
   const anyProviderError = results.find((r) => !r.ok && !r.devMode);
   const anySent = results.some((r) => r.ok);
   const devMode = results.every((r) => r.devMode);
+  const providerStatuses = results.map((r, i) => ({
+    to: maskMsisdn(allMsisdns[i]),
+    ok: r.ok,
+    provider: r.provider,
+    status: r.status,
+    error: r.error,
+  }));
   const body: Record<string, unknown> = {
     ok: anySent || devMode,
     sentTo: allMsisdns.map(maskMsisdn),
     expiresAt,
     devMode,
+    providerStatuses,
   };
   if (config.otp.devEcho || devMode) body.devCode = code;
   if (anyProviderError && !anySent) {
