@@ -1,5 +1,5 @@
 import { Link, Navigate, Route, Routes } from "react-router-dom";
-import { ShieldCheck, Vote as VoteIcon } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 import { HomePage } from "./pages/HomePage";
 import { ParticipatePage } from "./pages/ParticipatePage";
 import { OrganisePage } from "./pages/OrganisePage";
@@ -26,9 +26,11 @@ function Nav() {
           to="/"
           className="group inline-flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground hover:no-underline"
         >
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 transition group-hover:bg-primary/25">
-            <VoteIcon className="size-4" />
-          </span>
+          <img
+            src="/logo.png"
+            alt=""
+            className="h-9 w-9 rounded-lg object-contain transition group-hover:scale-105"
+          />
           <span>
             Sauti<span className="text-primary">.</span>
           </span>
