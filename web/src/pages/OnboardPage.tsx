@@ -29,7 +29,7 @@ import { config } from "../config";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { parseVoterCsv, parseVoterFile } from "@/lib/parseVoterFile";
 
@@ -368,7 +368,6 @@ export function OnboardPage() {
         backTo="/organise"
         backLabel="Organise"
         title="Enrol voters"
-        subtitle="One list per community. Each voter needs an ID and a phone."
       />
 
       {err && (
@@ -390,9 +389,6 @@ export function OnboardPage() {
           <div className="flex flex-wrap items-start gap-3">
             <div className="min-w-0 flex-1">
               <CardTitle className="text-base">Voter list</CardTitle>
-              <CardDescription>
-                Use separate lists for separate communities.
-              </CardDescription>
             </div>
             <Button
               variant="outline"
@@ -482,15 +478,12 @@ export function OnboardPage() {
           <CardTitle className="text-base">
             Add voters {activeList && <span className="text-muted-foreground">to {activeList.name}</span>}
           </CardTitle>
-          <CardDescription>
-            ID + phone per voter. Same ID on two rows = one voter, two SIMs, one vote.
-          </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-5">
           {/* ---- Step 1: source ---- */}
           <section>
-            <SectionLabel step={1} title="Pick a source" />
+            <SectionLabel step={1} title="Source" />
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
                 <Upload className="size-4" />
@@ -507,11 +500,10 @@ export function OnboardPage() {
                 variant={showImport ? "secondary" : "outline"}
                 onClick={() => setShowImport((v) => !v)}
               >
-                {showImport ? "Hide paste box" : "Paste CSV text"}
+                {showImport ? "Hide paste box" : "Paste CSV"}
               </Button>
               <span className="text-xs text-muted-foreground">
-                xlsx / xls / csv. Headers:{" "}
-                <span className="font-medium">Name, Phone, ID Number</span>. Or type rows below.
+                Columns: <span className="font-medium">Name, Phone, ID</span>
               </span>
             </div>
 
@@ -532,8 +524,8 @@ export function OnboardPage() {
           <section>
             <SectionLabel
               step={2}
-              title="Review the rows"
-              hint={`${draftCount} voter${draftCount === 1 ? "" : "s"} ready`}
+              title="Review"
+              hint={`${draftCount} ready`}
             />
             <div className="overflow-x-auto rounded-md border border-border/70">
               <table className="w-full text-sm">
@@ -609,7 +601,7 @@ export function OnboardPage() {
 
           {/* ---- Step 3: enrol ---- */}
           <section className="border-t border-border/60 pt-4">
-            <SectionLabel step={3} title="Enrol them" />
+            <SectionLabel step={3} title="Enrol" />
 
             {/* Danger toggle: replace-mode. Off by default. */}
             <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-sm">
@@ -648,9 +640,6 @@ export function OnboardPage() {
                     ? `Replace list with ${draftCount} voter${draftCount === 1 ? "" : "s"}`
                     : `Enrol ${draftCount} voter${draftCount === 1 ? "" : "s"}`}
               </Button>
-              <span className="text-xs text-muted-foreground">
-                Issues a Stellar keypair per voter and updates the Merkle root.
-              </span>
             </div>
           </section>
 
@@ -688,16 +677,11 @@ export function OnboardPage() {
               <CardTitle className="text-base">
                 Enrolled voters {activeList && <span className="text-muted-foreground">· {activeList.name}</span>}
               </CardTitle>
-              <CardDescription>
-                {enrolled ? (
-                  <>
-                    {enrolled.length} voter{enrolled.length === 1 ? "" : "s"}. Removing one changes the
-                    Merkle root — re-register the community afterwards.
-                  </>
-                ) : (
-                  <>Loading…</>
-                )}
-              </CardDescription>
+              {enrolled && (
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {enrolled.length} total
+                </div>
+              )}
             </div>
             <Button
               variant="outline"
@@ -834,10 +818,6 @@ export function OnboardPage() {
         <Card className="border-primary/40 bg-primary/5">
           <CardHeader>
             <CardTitle className="text-base">Next: register the community on-chain</CardTitle>
-            <CardDescription>
-              The list is on the bridge but not on-chain yet. Commit the Merkle root so eligibility
-              is publicly verifiable.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild size="lg">
@@ -854,7 +834,6 @@ export function OnboardPage() {
         open={showNewList}
         onClose={() => setShowNewList(false)}
         title="Create a new list"
-        description="Name it after the community (a class, chapter, village)."
       >
         <form
           onSubmit={(e) => {

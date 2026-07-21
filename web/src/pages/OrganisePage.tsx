@@ -12,7 +12,6 @@ import {
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -79,17 +78,12 @@ export function OrganisePage() {
             )}
           </div>
           {cfg && (
-            <div className="ml-auto flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1.5">
-                <Coins className="size-3.5" />
-                Fee{" "}
-                <b className="text-foreground">{xlm(cfg.fee)} XLM</b>
+                <Coins className="size-3.5" /> Fee <b className="text-foreground">{xlm(cfg.fee)} XLM</b>
               </span>
               <span className="inline-flex items-center gap-1.5">
-                <Coins className="size-3.5" />
-                Bond min{" "}
-                <b className="text-foreground">{xlm(cfg.bondMin)} XLM</b>{" "}
-                <span className="text-muted-foreground/80">(refunded)</span>
+                Bond <b className="text-foreground">{xlm(cfg.bondMin)}+</b>
               </span>
             </div>
           )}
@@ -109,28 +103,24 @@ export function OrganisePage() {
           step={1}
           icon={<Users className="size-5" />}
           title="Enrol voters"
-          description="Add voters by phone. Bridge issues a custodial key so they vote with just their number."
         />
         <StepCard
           to="/community"
           step={2}
           icon={<Landmark className="size-5" />}
           title="Register community"
-          description="Commit the voter roll to Soroban as a Merkle root. Only the root goes on-chain."
         />
         <StepCard
           to="/election"
           step={3}
           icon={<Megaphone className="size-5" />}
-          title="Open or close a ballot"
-          description="Pay the fee, lock the bond, run the ballot."
+          title="Open a ballot"
         />
         <StepCard
           to="/attesters"
           step={4}
           icon={<Fingerprint className="size-5" />}
           title="Proof of personhood"
-          description="Optional. Bind wallets to real humans on-chain — salted hashes only, no PII."
         />
       </div>
     </>
@@ -142,13 +132,11 @@ function StepCard({
   step,
   icon,
   title,
-  description,
 }: {
   to: string;
   step: number;
   icon: React.ReactNode;
   title: string;
-  description: string;
 }) {
   return (
     <Link to={to} className="group block h-full no-underline">
@@ -163,10 +151,6 @@ function StepCard({
             </span>
           </div>
           <CardTitle className="text-base">{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
-          <div className="pt-2 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
-            Open <span aria-hidden>→</span>
-          </div>
         </CardHeader>
       </Card>
     </Link>
