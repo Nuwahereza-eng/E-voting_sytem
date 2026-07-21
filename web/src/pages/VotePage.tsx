@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circle } from "lucide-react";
+import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circle, UserCheck } from "lucide-react";
 import { proofForMember } from "../merkle";
 import { readElection, readNextElectionId, submitVote, type ElectionInfo } from "../soroban";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../bridge";
 import { decodeElectionQuestion, decodeOption } from "../soroban";
 import { useWallet } from "../wallet";
+import { isPerson } from "../registry";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -1119,6 +1120,10 @@ function WalletVote({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState<string | null>(null);
+  // Personhood status of the connected wallet, per the on-chain
+  // attestation registry. null = still checking, false = not attested
+  // (or registry not configured), true = verified human.
+  const [verifiedHuman, setVerifiedHuman] = useState<boolean | null>(null);
 
   useEffect(() => {
     fetchMembers()
@@ -1127,6 +1132,22 @@ function WalletVote({
         /* bridge offline — user will see a helpful error on cast */
       });
   }, []);
+
+  // Re-check personhood whenever the connected wallet changes.
+  useEffect(() => {
+    let cancelled = false;
+    if (!wallet.address) {
+      setVerifiedHuman(null);
+      return;
+    }
+    setVerifiedHuman(null);
+    isPerson(wallet.address).then((v) => {
+      if (!cancelled) setVerifiedHuman(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet.address]);
 
   const inRoll = wallet.address ? members.includes(wallet.address) : false;
 
@@ -1187,6 +1208,11 @@ function WalletVote({
               <Badge variant="destructive">not on roll</Badge>
             ) : (
               <Badge variant="secondary">checking…</Badge>
+            )}
+            {verifiedHuman === true && (
+              <Badge variant="success" className="gap-1" title="This address has an active proof-of-personhood attestation on the Sauti registry.">
+                <UserCheck className="size-3" /> verified human
+              </Badge>
             )}
           </div>
           {!inRoll && members.length > 0 && (

@@ -9,6 +9,7 @@ import { ElectionPage } from "./pages/ElectionPage";
 import { MyStatusPage } from "./pages/MyStatusPage";
 import { VotePage } from "./pages/VotePage";
 import { VerifyPage } from "./pages/VerifyPage";
+import { AttesterPage } from "./pages/AttesterPage";
 import { Badge } from "@/components/ui/badge";
 import { config as appConfig } from "./config";
 
@@ -84,6 +85,7 @@ export function App() {
           <Route path="/voters" element={<OnboardPage />} />
           <Route path="/community" element={<CommunityPage />} />
           <Route path="/election" element={<ElectionPage />} />
+          <Route path="/attesters" element={<AttesterPage />} />
 
           {/* Legacy /admin/* redirects so old bookmarks keep working. */}
           <Route path="/admin" element={<Navigate to="/organise" replace />} />

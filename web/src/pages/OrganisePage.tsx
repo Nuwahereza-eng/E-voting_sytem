@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import {
   ArrowLeft,
   Coins,
+  Fingerprint,
   Landmark,
   Megaphone,
   Users,
@@ -124,6 +125,13 @@ export function OrganisePage() {
           icon={<Megaphone className="size-5" />}
           title="Open or close a ballot"
           description="Pay the fee, lock the bond, run the ballot. Anyone can close it after the deadline to trigger the bond refund."
+        />
+        <StepCard
+          to="/attesters"
+          step={4}
+          icon={<Fingerprint className="size-5" />}
+          title="Proof of personhood"
+          description="Optional. Curator + attester console to bind Stellar addresses to real humans on-chain. No PII touches the ledger — only salted-hash nullifiers."
         />
       </div>
     </>
