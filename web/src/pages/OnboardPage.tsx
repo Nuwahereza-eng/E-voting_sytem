@@ -29,7 +29,7 @@ import { config } from "../config";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ConfirmDialog, Dialog } from "@/components/ui/dialog";
 import { parseVoterCsv, parseVoterFile } from "@/lib/parseVoterFile";
 
@@ -368,6 +368,7 @@ export function OnboardPage() {
         backTo="/organise"
         backLabel="Organise"
         title="Enrol voters"
+        subtitle="One list per community."
       />
 
       {err && (
@@ -389,6 +390,9 @@ export function OnboardPage() {
           <div className="flex flex-wrap items-start gap-3">
             <div className="min-w-0 flex-1">
               <CardTitle className="text-base">Voter list</CardTitle>
+              <CardDescription>
+                One per community.
+              </CardDescription>
             </div>
             <Button
               variant="outline"
@@ -478,6 +482,9 @@ export function OnboardPage() {
           <CardTitle className="text-base">
             Add voters {activeList && <span className="text-muted-foreground">to {activeList.name}</span>}
           </CardTitle>
+          <CardDescription>
+            Name, phone, ID per voter.
+          </CardDescription>
         </CardHeader>
 
         <CardContent className="space-y-5">
@@ -677,11 +684,9 @@ export function OnboardPage() {
               <CardTitle className="text-base">
                 Enrolled voters {activeList && <span className="text-muted-foreground">· {activeList.name}</span>}
               </CardTitle>
-              {enrolled && (
-                <div className="mt-0.5 text-xs text-muted-foreground">
-                  {enrolled.length} total
-                </div>
-              )}
+              <CardDescription>
+                {enrolled ? `${enrolled.length} voter${enrolled.length === 1 ? "" : "s"}.` : "Loading…"}
+              </CardDescription>
             </div>
             <Button
               variant="outline"
@@ -817,7 +822,10 @@ export function OnboardPage() {
       {result && (
         <Card className="border-primary/40 bg-primary/5">
           <CardHeader>
-            <CardTitle className="text-base">Next: register the community on-chain</CardTitle>
+            <CardTitle className="text-base">Next: register the community on chain</CardTitle>
+            <CardDescription>
+              Commit the roll so eligibility is publicly verifiable.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Button asChild size="lg">
@@ -834,6 +842,7 @@ export function OnboardPage() {
         open={showNewList}
         onClose={() => setShowNewList(false)}
         title="Create a new list"
+        description="Name it after the community."
       >
         <form
           onSubmit={(e) => {

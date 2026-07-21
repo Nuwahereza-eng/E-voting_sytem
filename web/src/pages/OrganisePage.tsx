@@ -12,6 +12,7 @@ import {
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -103,24 +104,28 @@ export function OrganisePage() {
           step={1}
           icon={<Users className="size-5" />}
           title="Enrol voters"
+          description="Add voters by phone number."
         />
         <StepCard
           to="/community"
           step={2}
           icon={<Landmark className="size-5" />}
           title="Register community"
+          description="Commit the roll on chain."
         />
         <StepCard
           to="/election"
           step={3}
           icon={<Megaphone className="size-5" />}
           title="Open a ballot"
+          description="Pay the fee, lock the bond."
         />
         <StepCard
           to="/attesters"
           step={4}
           icon={<Fingerprint className="size-5" />}
           title="Proof of personhood"
+          description="Optional. Bind wallets to humans."
         />
       </div>
     </>
@@ -132,11 +137,13 @@ function StepCard({
   step,
   icon,
   title,
+  description,
 }: {
   to: string;
   step: number;
   icon: React.ReactNode;
   title: string;
+  description: string;
 }) {
   return (
     <Link to={to} className="group block h-full no-underline">
@@ -151,6 +158,7 @@ function StepCard({
             </span>
           </div>
           <CardTitle className="text-base">{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
         </CardHeader>
       </Card>
     </Link>

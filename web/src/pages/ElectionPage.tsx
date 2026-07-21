@@ -460,6 +460,11 @@ export function ElectionPage() {
       <Card className="mb-6">
         <CardHeader>
           <CardTitle className="text-base">Open a new election</CardTitle>
+          {cfg && (
+            <CardDescription>
+              Fee <b>{stroopsToXlm(cfg.fee)} XLM</b>. Bond from <b>{stroopsToXlm(cfg.bondMin)} XLM</b> (refunded).
+            </CardDescription>
+          )}
         </CardHeader>
         <CardContent className="space-y-3">
           <div>
@@ -518,12 +523,15 @@ export function ElectionPage() {
             />
           </div>
           <div>
-            <div className="mb-3 flex items-baseline justify-between gap-3">
+            <div className="mb-2 flex items-baseline justify-between gap-3">
               <label className="text-sm font-medium">Candidates</label>
               <span className="text-xs text-muted-foreground">
-                {candidates.filter((c) => c.label.trim()).length} named · min 2
+                {candidates.filter((c) => c.label.trim()).length} named. Min 2.
               </span>
             </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Name and symbol per candidate. Symbol prints big on the ballot.
+            </p>
             <div className="space-y-3">
               {candidates.map((c, i) => (
                 <CandidateEditor
@@ -801,7 +809,7 @@ export function ElectionPage() {
         <CardHeader>
           <CardTitle className="text-base">Close an election</CardTitle>
           <CardDescription>
-            After the deadline anyone can close. Bond refunds to the admin.
+            Anyone can close after the deadline. Bond refunds to the admin.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -946,7 +954,10 @@ function ShareCard({ electionId }: { electionId: number }) {
             <Share2 className="size-5" />
           </div>
           <div>
-            <CardTitle className="text-base">Election opened — share the ID</CardTitle>
+            <CardTitle className="text-base">Election opened. Share the ID.</CardTitle>
+            <CardDescription>
+              Voters enter this on the Vote page.
+            </CardDescription>
           </div>
         </div>
       </CardHeader>
