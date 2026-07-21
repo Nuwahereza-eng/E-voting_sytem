@@ -384,15 +384,15 @@ export function OnboardPage() {
         </div>
       )}
 
-      {/* -------- Working list -------- */}
+      {/* -------- Context strip: which list + bridge status -------- */}
       <Card className="mb-6">
-        <CardHeader>
-          <div className="flex flex-wrap items-center gap-3">
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-start gap-3">
             <div className="min-w-0 flex-1">
-              <CardTitle className="text-base">Working list</CardTitle>
+              <CardTitle className="text-base">Voter list</CardTitle>
               <CardDescription>
-                Every action below affects this list only. Use separate lists for separate
-                communities (e.g. a class, a SACCO, a village council).
+                Every voter you add belongs to one list. Use separate lists for separate
+                communities (a class, a SACCO chapter, a village council).
               </CardDescription>
             </div>
             <Button
@@ -408,11 +408,14 @@ export function OnboardPage() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-wrap items-center gap-3">
+        <CardContent className="space-y-3">
           {lists ? (
-            <>
-              <label htmlFor="list-picker" className="text-sm text-muted-foreground">
-                List:
+            <div className="flex flex-wrap items-center gap-3">
+              <label
+                htmlFor="list-picker"
+                className="text-xs uppercase tracking-wider text-muted-foreground"
+              >
+                Active list
               </label>
               <select
                 id="list-picker"
@@ -427,11 +430,6 @@ export function OnboardPage() {
                   </option>
                 ))}
               </select>
-              {activeList && (
-                <Badge variant="secondary">
-                  {activeList.memberCount} voter{activeList.memberCount === 1 ? "" : "s"}
-                </Badge>
-              )}
               {activeList && lists.length > 1 && (
                 <Button
                   variant="ghost"
@@ -440,42 +438,42 @@ export function OnboardPage() {
                   onClick={() => setConfirmDeleteList(activeList)}
                 >
                   <Trash2 className="size-4" />
-                  Delete list
+                  Delete this list
                 </Button>
               )}
-            </>
+            </div>
           ) : (
             <span className="text-sm text-muted-foreground">
               <Loader2 className="mr-1 inline size-3.5 animate-spin" />
               Loading lists…
             </span>
           )}
-        </CardContent>
-      </Card>
 
-      {/* Bridge status chip */}
-      <Card className="mb-4">
-        <CardContent className="flex flex-wrap items-center gap-3 py-3 text-sm">
-          {current ? (
-            <>
-              <Badge variant="success">Bridge online</Badge>
+          {/* Bridge status inline row */}
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-xs">
+            {current ? (
+              <>
+                <Badge variant="success">Bridge online</Badge>
+                <span className="text-muted-foreground">
+                  <b className="text-foreground">{current.count}</b> voter
+                  {current.count === 1 ? "" : "s"} enrolled in{" "}
+                  <b className="text-foreground">{activeList?.name ?? "…"}</b>
+                </span>
+                <span
+                  className="ml-auto font-mono text-[11px] text-muted-foreground/70"
+                  title={current.root}
+                >
+                  Merkle root {current.root.slice(0, 8)}…{current.root.slice(-6)}
+                </span>
+              </>
+            ) : (
               <span className="text-muted-foreground">
-                <b className="text-foreground">{current.count}</b> voter
-                {current.count === 1 ? "" : "s"} in{" "}
-                <b className="text-foreground">{activeList?.name ?? "…"}</b>
+                <Loader2 className="mr-1 inline size-3.5 animate-spin" />
+                Contacting bridge at{" "}
+                <span className="font-mono">{config.bridgeUrl}</span>…
               </span>
-            </>
-          ) : (
-            <span className="text-muted-foreground">
-              <Loader2 className="mr-1 inline size-3.5 animate-spin" />
-              Contacting bridge at <span className="font-mono text-xs">{config.bridgeUrl}</span>…
-            </span>
-          )}
-          <span className="ml-auto font-mono text-xs text-muted-foreground/80" title={current?.root}>
-            {current?.root
-              ? `root ${current.root.slice(0, 10)}…${current.root.slice(-6)}`
-              : ""}
-          </span>
+            )}
+          </div>
         </CardContent>
       </Card>
 
@@ -486,171 +484,201 @@ export function OnboardPage() {
             Add voters {activeList && <span className="text-muted-foreground">to {activeList.name}</span>}
           </CardTitle>
           <CardDescription>
-            Import a spreadsheet, paste a CSV, or type rows below. Every voter needs an{" "}
-            <b>ID number</b> (student, national, or membership). Two rows sharing the same ID
-            become aliases — one person, two SIMs, one vote.
+            Every voter needs an <b>ID number</b> (student, national, or
+            membership) and a <b>phone number</b>. Two rows with the same
+            ID become aliases — one person, two SIMs, one vote.
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
-              <Upload className="size-4" />
-              Import file
-            </Button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-              className="hidden"
-              onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)}
-            />
-            <span className="text-xs text-muted-foreground">
-              Excel (.xlsx, .xls) or CSV. First row can be headers: <i>Name, Phone, ID Number</i>.
-            </span>
-            <button
-              type="button"
-              className="ml-auto text-xs text-accent underline-offset-2 hover:underline"
-              onClick={() => setShowImport((v) => !v)}
-            >
-              {showImport ? "Hide paste box" : "Paste CSV instead"}
-            </button>
-          </div>
-
-          {showImport && (
-            <textarea
-              placeholder={"Alice,+256700000001,STU-2026-001\nBob,+256700000002,STU-2026-002"}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
-              rows={4}
-              onBlur={(e) => {
-                pasteCsv(e.target.value);
-                e.target.value = "";
-              }}
-            />
-          )}
-
-          <div className="overflow-x-auto rounded-md border border-border/70">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/30 text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">#</th>
-                  <th className="px-3 py-2 text-left font-medium">Name (optional)</th>
-                  <th className="px-3 py-2 text-left font-medium">
-                    ID number <span className="text-destructive">*</span>
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium">
-                    Phone (E.164) <span className="text-destructive">*</span>
-                  </th>
-                  <th className="px-3 py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r, i) => (
-                  <tr key={i} className="border-t border-border/60">
-                    <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
-                    <td className="px-3 py-2">
-                      <input
-                        value={r.name}
-                        onChange={(e) => updateRow(i, { name: e.target.value })}
-                        placeholder="Alice"
-                        className="w-full rounded-md border border-input bg-background px-2 py-1"
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        value={r.idNumber}
-                        onChange={(e) => updateRow(i, { idNumber: e.target.value })}
-                        placeholder="STU-2026-001 or CM-99887766"
-                        className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono"
-                      />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input
-                        value={r.msisdn}
-                        onChange={(e) => updateRow(i, { msisdn: e.target.value })}
-                        placeholder="+2567..."
-                        className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono"
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      <button
-                        type="button"
-                        onClick={() => removeRow(i)}
-                        className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        aria-label="Remove row"
-                      >
-                        <Trash2 className="size-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={addRow}>
-              <Plus className="size-4" />
-              Add row
-            </Button>
-            {rows.some((r) => r.msisdn || r.name || r.idNumber) && (
-              <Button variant="ghost" size="sm" onClick={clearRows}>
-                Clear draft
+        <CardContent className="space-y-5">
+          {/* ---- Step 1: source ---- */}
+          <section>
+            <SectionLabel step={1} title="Pick a source" />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="size-4" />
+                Import spreadsheet
               </Button>
-            )}
-            <span className="ml-auto text-xs text-muted-foreground">
-              {draftCount} voter{draftCount === 1 ? "" : "s"} ready to provision
-            </span>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-4 border-t border-border/60 pt-4">
-            <div className="flex items-center gap-3">
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  checked={mode === "append"}
-                  onChange={() => setMode("append")}
-                />
-                Append to this list
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="radio"
-                  checked={mode === "replace"}
-                  onChange={() => setMode("replace")}
-                />
-                Replace this list
-              </label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                className="hidden"
+                onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)}
+              />
+              <Button
+                variant={showImport ? "secondary" : "outline"}
+                onClick={() => setShowImport((v) => !v)}
+              >
+                {showImport ? "Hide paste box" : "Paste CSV text"}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Accepts <i>.xlsx</i>, <i>.xls</i>, <i>.csv</i>. First row can be headers:{" "}
+                <span className="font-medium">Name, Phone, ID Number</span>. Or type rows below.
+              </span>
             </div>
-            <Button
-              className="ml-auto"
-              onClick={provision}
-              disabled={busy || !current || draftCount === 0}
-            >
-              {busy && <Loader2 className="size-4 animate-spin" />}
-              {busy ? "Provisioning..." : `Provision ${draftCount} voter${draftCount === 1 ? "" : "s"}`}
-            </Button>
-          </div>
+
+            {showImport && (
+              <textarea
+                placeholder={"Alice,+256700000001,STU-2026-001\nBob,+256700000002,STU-2026-002"}
+                className="mt-3 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
+                rows={4}
+                onBlur={(e) => {
+                  pasteCsv(e.target.value);
+                  e.target.value = "";
+                }}
+              />
+            )}
+          </section>
+
+          {/* ---- Step 2: review rows ---- */}
+          <section>
+            <SectionLabel
+              step={2}
+              title="Review the rows"
+              hint={`${draftCount} voter${draftCount === 1 ? "" : "s"} ready`}
+            />
+            <div className="overflow-x-auto rounded-md border border-border/70">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/30 text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">#</th>
+                    <th className="px-3 py-2 text-left font-medium">Name (optional)</th>
+                    <th className="px-3 py-2 text-left font-medium">
+                      ID number <span className="text-destructive">*</span>
+                    </th>
+                    <th className="px-3 py-2 text-left font-medium">
+                      Phone (E.164) <span className="text-destructive">*</span>
+                    </th>
+                    <th className="px-3 py-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={i} className="border-t border-border/60">
+                      <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                      <td className="px-3 py-2">
+                        <input
+                          value={r.name}
+                          onChange={(e) => updateRow(i, { name: e.target.value })}
+                          placeholder="Alice"
+                          className="w-full rounded-md border border-input bg-background px-2 py-1"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          value={r.idNumber}
+                          onChange={(e) => updateRow(i, { idNumber: e.target.value })}
+                          placeholder="STU-2026-001 or CM-99887766"
+                          className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono"
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          value={r.msisdn}
+                          onChange={(e) => updateRow(i, { msisdn: e.target.value })}
+                          placeholder="+2567..."
+                          className="w-full rounded-md border border-input bg-background px-2 py-1 font-mono"
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          onClick={() => removeRow(i)}
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                          aria-label="Remove row"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={addRow}>
+                <Plus className="size-4" />
+                Add another row
+              </Button>
+              {rows.some((r) => r.msisdn || r.name || r.idNumber) && (
+                <Button variant="ghost" size="sm" onClick={clearRows}>
+                  Clear all rows
+                </Button>
+              )}
+            </div>
+          </section>
+
+          {/* ---- Step 3: enrol ---- */}
+          <section className="border-t border-border/60 pt-4">
+            <SectionLabel step={3} title="Enrol them" />
+
+            {/* Danger toggle: replace-mode. Off by default. */}
+            <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-sm">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={mode === "replace"}
+                onChange={(e) => setMode(e.target.checked ? "replace" : "append")}
+              />
+              <span className="flex-1">
+                <span
+                  className={
+                    mode === "replace"
+                      ? "font-semibold text-destructive"
+                      : "font-medium"
+                  }
+                >
+                  Replace the entire list
+                </span>
+                <span className="ml-1 text-xs text-muted-foreground">
+                  Deletes every existing voter in{" "}
+                  <b>{activeList?.name ?? "this list"}</b> before enrolling
+                  the rows above.
+                </span>
+              </span>
+            </label>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                onClick={provision}
+                disabled={busy || !current || draftCount === 0}
+                size="lg"
+              >
+                {busy && <Loader2 className="size-4 animate-spin" />}
+                {busy
+                  ? "Enrolling…"
+                  : mode === "replace"
+                    ? `Replace list with ${draftCount} voter${draftCount === 1 ? "" : "s"}`
+                    : `Enrol ${draftCount} voter${draftCount === 1 ? "" : "s"}`}
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Enrolling issues a Stellar keypair per voter and updates the Merkle root.
+              </span>
+            </div>
+          </section>
 
           {result && (
             <div className="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
               <div>
-                <b>{result.assignments.length}</b> phone binding
-                {result.assignments.length === 1 ? "" : "s"} processed —{" "}
+                Enrolled <b>{result.assignments.length}</b> phone binding
+                {result.assignments.length === 1 ? "" : "s"} —{" "}
                 <b>{result.members.length}</b> unique voter
-                {result.members.length === 1 ? "" : "s"} in {activeList?.name ?? "this list"}.
+                {result.members.length === 1 ? "" : "s"} now in {activeList?.name ?? "this list"}.
                 {result.assignments.filter((a) => a.alias).length > 0 && (
                   <>
                     {" "}
                     <span className="opacity-80">
-                      ({result.assignments.filter((a) => a.alias).length} were additional phones for
-                      an already-listed voter.)
+                      ({result.assignments.filter((a) => a.alias).length} additional phone
+                      {result.assignments.filter((a) => a.alias).length === 1 ? "" : "s"} for an
+                      already-enrolled voter.)
                     </span>
                   </>
                 )}
               </div>
               <div className="mt-1 font-mono text-xs opacity-80">
-                Merkle root: {result.root.slice(0, 12)}…{result.root.slice(-8)}
+                New Merkle root: {result.root.slice(0, 12)}…{result.root.slice(-8)}
               </div>
             </div>
           )}
@@ -791,11 +819,16 @@ export function OnboardPage() {
           )}
 
           {enrolled && enrolled.length === 0 && !loadingEnrolled && (
-            <div className="flex flex-col items-center gap-2 py-8 text-center text-sm text-muted-foreground">
-              <FileSpreadsheet className="size-8 opacity-40" />
-              <div>
-                No voters in {activeList?.name ?? "this list"} yet. Import a spreadsheet or add rows
-                above to get started.
+            <div className="flex flex-col items-center gap-3 py-10 text-center text-sm text-muted-foreground">
+              <FileSpreadsheet className="size-10 opacity-40" />
+              <div className="space-y-1">
+                <div className="text-base font-medium text-foreground">
+                  No voters yet in {activeList?.name ?? "this list"}
+                </div>
+                <div>
+                  Start by importing a spreadsheet or typing rows in the
+                  “Add voters” card above.
+                </div>
               </div>
             </div>
           )}
@@ -803,16 +836,16 @@ export function OnboardPage() {
       </Card>
 
       {result && (
-        <Card>
+        <Card className="border-primary/40 bg-primary/5">
           <CardHeader>
-            <CardTitle className="text-base">Next: register on-chain</CardTitle>
+            <CardTitle className="text-base">Next: register the community on-chain</CardTitle>
             <CardDescription>
-              The list lives on the bridge. To make it verifiable, commit the Merkle root to
-              Soroban.
+              Your voter list is safely stored by the bridge, but it isn’t verifiable yet. Commit
+              the Merkle root to Soroban so anyone can prove who was eligible.
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Button asChild>
+            <Button asChild size="lg">
               <Link to="/community">
                 Register community <ArrowRight className="size-4" />
               </Link>
@@ -906,5 +939,31 @@ export function OnboardPage() {
         busy={busy}
       />
     </>
+  );
+}
+
+/**
+ * A numbered section heading used inside the "Add voters" card so the
+ * organiser sees an unambiguous 1 -> 2 -> 3 flow.
+ */
+function SectionLabel({
+  step,
+  title,
+  hint,
+}: {
+  step: number;
+  title: string;
+  hint?: string;
+}) {
+  return (
+    <div className="mb-3 flex items-center gap-2">
+      <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
+        {step}
+      </span>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      {hint && (
+        <span className="ml-auto text-xs text-muted-foreground">{hint}</span>
+      )}
+    </div>
   );
 }

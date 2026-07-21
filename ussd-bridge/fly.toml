@@ -1,0 +1,54 @@
+# Fly.io deployment for the Sauti USSD/SMS bridge.
+#
+# One-time setup:
+#   cd ussd-bridge
+#   fly launch --no-deploy --copy-config     # accept defaults
+#   fly volumes create sauti_data --size 1 --region jnb
+#   fly secrets set \
+#     CONTRACT_ID=CDLYCBSVJ4NFTXT22D3CQXB7WPK3D5DLS7TOCOLKFM6AO5HUZK7Z6IDZ \
+#     AT_USERNAME=... AT_API_KEY=... AT_SENDER_ID=...
+#   fly deploy
+#
+# The mounted volume gives you a persistent /data directory so the voter
+# registry and members file survive restarts (Render's free tier does not).
+
+app = "sauti-bridge"
+primary_region = "jnb"
+
+[build]
+  # Uses ussd-bridge/Dockerfile
+
+[env]
+  PORT = "8080"
+  NETWORK_PASSPHRASE = "Test SDF Network ; September 2015"
+  RPC_URL = "https://soroban-testnet.stellar.org"
+  HORIZON_URL = "https://horizon-testnet.stellar.org"
+  REGISTRY_PATH = "/data/registry.json"
+  MEMBERS_PATH = "/data/members.json"
+
+[[mounts]]
+  source = "sauti_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 200
+    soft_limit = 100
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+    method = "get"
+    path = "/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

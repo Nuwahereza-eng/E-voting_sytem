@@ -144,11 +144,11 @@ function StepCard({
   description: string;
 }) {
   return (
-    <Link to={to} className="group block h-full">
-      <Card className="h-full transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/40">
+    <Link to={to} className="group block h-full no-underline">
+      <Card className="h-full border-primary/20 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-primary/60 group-hover:shadow-md group-hover:shadow-primary/10 group-focus-visible:ring-2 group-focus-visible:ring-ring">
         <CardHeader>
           <div className="mb-2 flex items-center justify-between">
-            <div className="inline-flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30">
+            <div className="inline-flex size-10 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30 transition group-hover:ring-primary/60">
               {icon}
             </div>
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -157,6 +157,9 @@ function StepCard({
           </div>
           <CardTitle className="text-base">{title}</CardTitle>
           <CardDescription>{description}</CardDescription>
+          <div className="pt-2 text-xs font-medium text-primary opacity-0 transition-opacity group-hover:opacity-100">
+            Open <span aria-hidden>→</span>
+          </div>
         </CardHeader>
       </Card>
     </Link>

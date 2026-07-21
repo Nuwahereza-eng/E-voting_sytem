@@ -1,0 +1,42 @@
+# Render blueprint for the Sauti USSD/SMS bridge.
+# Deploy: push to GitHub, then in Render dashboard: New → Blueprint →
+# select this repo. Render will pick up this file automatically.
+#
+# NOTE: the free plan has ephemeral disk, so ussd-bridge/data/*.json is
+# lost on every restart. For a persistent voter registry, upgrade to a
+# paid plan and attach a disk, or use Fly.io (see fly.toml).
+
+services:
+  - type: web
+    name: sauti-bridge
+    runtime: node
+    plan: free
+    rootDir: ussd-bridge
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: PORT
+        value: "10000"
+      - key: NETWORK_PASSPHRASE
+        value: "Test SDF Network ; September 2015"
+      - key: RPC_URL
+        value: "https://soroban-testnet.stellar.org"
+      - key: HORIZON_URL
+        value: "https://horizon-testnet.stellar.org"
+      - key: REGISTRY_PATH
+        value: "./data/registry.json"
+      - key: MEMBERS_PATH
+        value: "./data/members.json"
+      # Fill these in the Render dashboard (marked sync:false so they are
+      # not committed to the repo).
+      - key: CONTRACT_ID
+        sync: false
+      - key: AT_USERNAME
+        sync: false
+      - key: AT_API_KEY
+        sync: false
+      - key: AT_SENDER_ID
+        sync: false

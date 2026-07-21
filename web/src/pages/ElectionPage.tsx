@@ -88,12 +88,13 @@ export function ElectionPage() {
   const [communityId, setCommunityId] = useState<number | null>(null);
   const [electionName, setElectionName] = useState("Kampala SACCO 2026 Chair");
   const [electionTitle, setElectionTitle] = useState("Who leads the SACCO in 2026?");
-  // Candidate rows — each has a label (name) and an optional symbol
-  // (party emblem, e.g. "\u2602 Umbrella") so voters who don't read
-  // fluently can still pick their person.
+  // Candidate rows — each has a label (name) and a symbol
+  // (party emblem, e.g. "☂") so voters who don't read fluently can
+  // still pick their person. Symbols are single emoji so they render
+  // large on the vote card and on the printed poster.
   const [candidates, setCandidates] = useState<Array<{ label: string; symbol: string }>>([
-    { label: "Alice Nakato", symbol: "\u2602 Umbrella" },
-    { label: "Bob Okello", symbol: "\u231A Watch" },
+    { label: "Alice Nakato", symbol: "☂" },
+    { label: "Bob Okello", symbol: "⌚" },
   ]);
   // Calendar date + time when voting closes. Default: 1 hour from now,
   // formatted for <input type="datetime-local"> (YYYY-MM-DDTHH:mm in
@@ -368,46 +369,40 @@ export function ElectionPage() {
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium">Candidates</label>
-            <div className="space-y-2">
+            <div className="mb-2 flex items-baseline justify-between gap-3">
+              <label className="text-sm font-medium">Candidates</label>
+              <span className="text-xs text-muted-foreground">
+                {candidates.filter((c) => c.label.trim()).length} named ·{" "}
+                need at least 2
+              </span>
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Each candidate needs a <b>name</b> and a <b>symbol</b> (a
+              single emoji). The symbol shows up big on the ballot so
+              voters who can’t read fluently still recognise their
+              candidate.
+            </p>
+            <div className="space-y-3">
               {candidates.map((c, i) => (
-                <div key={i} className="flex flex-wrap items-center gap-2">
-                  <span className="w-6 font-mono text-xs text-muted-foreground">#{i}</span>
-                  <input
-                    value={c.label}
-                    onChange={(e) =>
-                      setCandidates((prev) =>
-                        prev.map((p, j) => (j === i ? { ...p, label: e.target.value } : p)),
-                      )
-                    }
-                    placeholder="Candidate name"
-                    className="flex-1 min-w-[160px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
-                  <input
-                    value={c.symbol}
-                    onChange={(e) =>
-                      setCandidates((prev) =>
-                        prev.map((p, j) => (j === i ? { ...p, symbol: e.target.value } : p)),
-                      )
-                    }
-                    placeholder="Symbol"
-                    className="w-40 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  />
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      setCandidates((prev) => (prev.length > 1 ? prev.filter((_, j) => j !== i) : prev))
-                    }
-                    disabled={candidates.length <= 1}
-                    title="Remove candidate"
-                  >
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
+                <CandidateEditor
+                  key={i}
+                  index={i}
+                  candidate={c}
+                  canRemove={candidates.length > 2}
+                  onChange={(next) =>
+                    setCandidates((prev) =>
+                      prev.map((p, j) => (j === i ? next : p)),
+                    )
+                  }
+                  onRemove={() =>
+                    setCandidates((prev) =>
+                      prev.length > 1 ? prev.filter((_, j) => j !== i) : prev,
+                    )
+                  }
+                />
               ))}
             </div>
-            <div className="mt-2">
+            <div className="mt-3">
               <Button
                 variant="outline"
                 size="sm"
@@ -416,7 +411,7 @@ export function ElectionPage() {
                 }
               >
                 <Plus className="size-4" />
-                Add candidate
+                Add another candidate
               </Button>
             </div>
           </div>
@@ -490,6 +485,7 @@ export function ElectionPage() {
                   <tr>
                     <th className="px-3 py-2 text-left font-medium">ID</th>
                     <th className="px-3 py-2 text-left font-medium">Name / Title</th>
+                    <th className="px-3 py-2 text-left font-medium">Symbols</th>
                     <th className="px-3 py-2 text-left font-medium">Candidates</th>
                     <th className="px-3 py-2 text-left font-medium">Community</th>
                     <th className="px-3 py-2 text-left font-medium">Status</th>
@@ -503,8 +499,11 @@ export function ElectionPage() {
                     const closedForResults = e.closed || Date.now() / 1000 >= e.closesAt;
                     const communityName =
                       myCommunities?.find((c) => c.id === e.communityId)?.name;
+                    const decoded = e.options.map((raw) => decodeOption(raw));
+                    const preview = decoded.slice(0, 3);
+                    const extra = decoded.length - preview.length;
                     return (
-                      <tr key={e.id} className="border-t border-border/60">
+                      <tr key={e.id} className="border-t border-border/60 align-top">
                         <td className="px-3 py-2 font-mono text-base font-semibold">{e.id}</td>
                         <td className="px-3 py-2">
                           <div className="font-medium">{e.meta.name || e.meta.title || e.question}</div>
@@ -512,17 +511,35 @@ export function ElectionPage() {
                             <div className="text-xs text-muted-foreground">{e.meta.title}</div>
                           )}
                         </td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
-                          {e.options.slice(0, 3).map((raw, i) => {
-                            const o = decodeOption(raw);
-                            return (
-                              <span key={i} className="mr-2 inline-block whitespace-nowrap">
-                                {o.symbol && <span className="mr-1">{o.symbol}</span>}
-                                {o.label}
+                        <td className="px-3 py-2">
+                          <div className="flex flex-wrap gap-1">
+                            {preview.map((o, i) => (
+                              <span
+                                key={i}
+                                className="inline-flex size-8 items-center justify-center rounded-md border border-border/60 bg-background text-lg leading-none"
+                                title={o.label}
+                              >
+                                {o.symbol || (
+                                  <span className="text-muted-foreground/50">·</span>
+                                )}
                               </span>
-                            );
-                          })}
-                          {e.options.length > 3 && <span>+{e.options.length - 3}</span>}
+                            ))}
+                            {extra > 0 && (
+                              <span className="inline-flex size-8 items-center justify-center rounded-md border border-dashed border-border/60 text-xs text-muted-foreground">
+                                +{extra}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-2 text-xs text-muted-foreground">
+                          <div className="space-y-0.5">
+                            {preview.map((o, i) => (
+                              <div key={i} className="truncate">
+                                {o.label}
+                              </div>
+                            ))}
+                            {extra > 0 && <div>+{extra} more</div>}
+                          </div>
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
                           {communityName ?? `#${e.communityId}`}
@@ -736,6 +753,128 @@ function ShareCard({ electionId }: { electionId: number }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// A quick-pick palette of common ballot emblems. Organisers can still
+// type any single emoji they like; these are just one-tap shortcuts.
+const SYMBOL_SUGGESTIONS = [
+  "\u2602",
+  "\u231a",
+  "\u26bd",
+  "\ud83d\udeb2",
+  "\ud83c\udf3b",
+  "\ud83c\udf3e",
+  "\u2b50",
+  "\ud83c\udfe0",
+  "\ud83c\udf33",
+  "\ud83d\udcda",
+  "\ud83d\udd11",
+  "\u2618\ufe0f",
+  "\ud83d\udd25",
+  "\ud83d\ude9c",
+  "\ud83d\udca7",
+  "\ud83d\udd28",
+];
+
+function CandidateEditor({
+  index,
+  candidate,
+  canRemove,
+  onChange,
+  onRemove,
+}: {
+  index: number;
+  candidate: { label: string; symbol: string };
+  canRemove: boolean;
+  onChange: (next: { label: string; symbol: string }) => void;
+  onRemove: () => void;
+}) {
+  const nameFilled = candidate.label.trim().length > 0;
+  const symbolFilled = candidate.symbol.trim().length > 0;
+  return (
+    <div
+      className={`rounded-lg border p-3 transition ${
+        nameFilled && symbolFilled
+          ? "border-border/60 bg-background"
+          : "border-amber-500/30 bg-amber-500/5"
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        {/* Poster-style preview tile: shows exactly what voters will see. */}
+        <div className="flex size-14 flex-none items-center justify-center rounded-md border border-border/60 bg-muted/40 text-3xl leading-none">
+          {candidate.symbol.trim() || (
+            <span className="text-muted-foreground/50">?</span>
+          )}
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <div className="mb-1 flex items-center gap-2">
+            <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
+              {index + 1}
+            </span>
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              Candidate {index + 1}
+            </span>
+          </div>
+          <input
+            value={candidate.label}
+            onChange={(e) => onChange({ ...candidate, label: e.target.value })}
+            placeholder="Full name (e.g. Alice Nakato)"
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+        </div>
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onRemove}
+          disabled={!canRemove}
+          title={canRemove ? "Remove candidate" : "Need at least 2 candidates"}
+          className="self-start"
+        >
+          <Trash2 className="size-4" />
+        </Button>
+      </div>
+
+      <div className="mt-3 border-t border-border/50 pt-3">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Symbol
+          </span>
+          <input
+            value={candidate.symbol}
+            onChange={(e) => onChange({ ...candidate, symbol: e.target.value })}
+            placeholder="☂"
+            maxLength={4}
+            className="w-16 rounded-md border border-input bg-background px-2 py-1 text-center text-lg"
+          />
+          <span className="text-xs text-muted-foreground">
+            or tap one:
+          </span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {SYMBOL_SUGGESTIONS.map((s) => {
+            const active = candidate.symbol.trim() === s;
+            return (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onChange({ ...candidate, symbol: s })}
+                className={`flex size-9 items-center justify-center rounded-md border text-xl leading-none transition ${
+                  active
+                    ? "border-primary bg-primary/10"
+                    : "border-border/60 bg-background hover:border-primary/40 hover:bg-muted/30"
+                }`}
+                aria-label={`Use ${s}`}
+              >
+                {s}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
   );
 }
 

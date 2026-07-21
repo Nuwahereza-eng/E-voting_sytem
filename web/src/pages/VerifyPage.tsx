@@ -13,6 +13,53 @@ import { TallyBars } from "./VotePage";
 import { lookupAttestation, type Attestation } from "../registry";
 import { config } from "../config";
 import { PageHeader } from "@/components/PageHeader";
+
+// Map Soroban contract-error codes emitted by the evoting contract
+// (see contracts/evoting/src/lib.rs) to a short user-facing sentence.
+// The raw HostError string is unfriendly and gives away nothing useful
+// to a first-time voter looking up an ID.
+const CONTRACT_ERROR_MESSAGES: Record<number, string> = {
+  1: "You aren't authorised to view this election.",
+  2: "That community doesn't exist on this contract.",
+  3: "No election with that ID exists on this contract yet.",
+  4: "This election is already closed.",
+  11: "The Sauti contract on this network hasn't been initialised yet.",
+};
+
+function classifyError(raw: string): {
+  title: string;
+  message: string;
+  hint?: string;
+  isNotFound: boolean;
+} {
+  const codeMatch = raw.match(/Error\(Contract,\s*#(\d+)\)/);
+  if (codeMatch) {
+    const code = Number(codeMatch[1]);
+    const msg = CONTRACT_ERROR_MESSAGES[code];
+    if (msg) {
+      return {
+        title:
+          code === 3
+            ? "Election ID not found"
+            : "Couldn't load this election",
+        message: msg,
+        hint:
+          code === 3
+            ? "Double-check the number with the organiser. IDs start at 0 and go up by one."
+            : undefined,
+        isNotFound: code === 3 || code === 2,
+      };
+    }
+  }
+  // Network / RPC / anything else.
+  return {
+    title: "Couldn't reach the ledger",
+    message:
+      "Sauti couldn't get a response from Stellar just now. This is usually a transient network hiccup.",
+    hint: "Try again in a few seconds.",
+    isNotFound: false,
+  };
+}
 import {
   Card,
   CardContent,
@@ -61,8 +108,15 @@ export function VerifyPage() {
         setAttestation(a);
       }
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      const raw = e instanceof Error ? e.message : String(e);
+      setErr(raw);
       if (isFirst) setElection(null);
+      // If the contract explicitly said "not found", polling every 4s
+      // will keep churning and spamming the console for nothing.
+      if (classifyError(raw).isNotFound && timer.current) {
+        window.clearInterval(timer.current);
+        timer.current = null;
+      }
     } finally {
       if (isFirst) setLoading(false);
     }
@@ -146,21 +200,36 @@ export function VerifyPage() {
 
       {loading && !election && <VerifySkeleton />}
 
-      {err && !loading && (
-        <Card className="mt-4 border-destructive/50 bg-destructive/5">
-          <CardContent className="flex items-start gap-3 pt-6 text-sm text-destructive">
-            <AlertTriangle className="mt-0.5 size-5 flex-none" />
-            <div>
-              <div className="font-semibold">Could not load election</div>
-              <div className="mt-1 text-xs text-destructive/80">{err}</div>
-              <div className="mt-2 text-xs text-muted-foreground">
-                Check the ID with the organiser, or try again in a few
-                seconds — the ledger may still be indexing.
+      {err && !loading && (() => {
+        const info = classifyError(err);
+        const accent = info.isNotFound
+          ? "border-amber-500/40 bg-amber-500/5 text-amber-700 dark:text-amber-300"
+          : "border-destructive/50 bg-destructive/5 text-destructive";
+        return (
+          <Card className={`mt-4 ${accent}`}>
+            <CardContent className="flex items-start gap-3 pt-6 text-sm">
+              <AlertTriangle className="mt-0.5 size-5 flex-none" />
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold">{info.title}</div>
+                <div className="mt-1 text-sm">{info.message}</div>
+                {info.hint && (
+                  <div className="mt-2 text-xs text-muted-foreground">
+                    {info.hint}
+                  </div>
+                )}
+                <details className="mt-3 text-xs">
+                  <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                    Technical details
+                  </summary>
+                  <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md bg-background/60 p-2 font-mono text-[11px] text-muted-foreground">
+                    {err}
+                  </pre>
+                </details>
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {election && (() => {
         const meta = decodeElectionQuestion(election.question);

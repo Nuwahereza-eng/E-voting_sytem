@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight } from "lucide-react";
+import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circle } from "lucide-react";
 import { proofForMember } from "../merkle";
 import { readElection, readNextElectionId, submitVote, type ElectionInfo } from "../soroban";
 import {
@@ -619,36 +619,23 @@ function IdVote({
                 </span>
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-4">
               <p className="text-xs text-muted-foreground">
-                Pick your candidate. The symbol next to each name is the party emblem on the poster.
+                Tap your candidate. The symbol on the left is the party emblem printed on the poster.
               </p>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {selected.options.map((rawOpt, i) => {
                   const o = decodeOption(rawOpt);
                   return (
-                    <label
+                    <CandidateCard
                       key={i}
-                      className={`flex cursor-pointer items-center gap-3 rounded-md border px-3 py-3 text-sm ${
-                        chosenOption === i
-                          ? "border-primary/60 bg-primary/10"
-                          : "border-border/60 hover:border-primary/40"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name={`opt-${selected.electionId}`}
-                        checked={chosenOption === i}
-                        onChange={() => setChosenOption(i)}
-                      />
-                      {o.symbol && (
-                        <span className="inline-flex min-w-[96px] items-center justify-center rounded-md border border-border/60 bg-background px-2 py-1 text-sm font-medium">
-                          {o.symbol}
-                        </span>
-                      )}
-                      <span className="flex-1 font-medium">{o.label}</span>
-                      <span className="text-xs text-muted-foreground">#{i}</span>
-                    </label>
+                      index={i}
+                      label={o.label}
+                      symbol={o.symbol}
+                      selected={chosenOption === i}
+                      onSelect={() => setChosenOption(i)}
+                      name={`opt-${selected.electionId}`}
+                    />
                   );
                 })}
               </div>
@@ -700,13 +687,15 @@ function IdVote({
                 </Row>
                 {meta.name && meta.title && <Row label="Question">{displayTitle}</Row>}
                 <Row label="Your choice">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-3">
                     {chosen.symbol && (
-                      <span className="inline-flex items-center justify-center rounded-md border border-border/60 bg-background px-2 py-1 text-sm font-medium">
+                      <span className="flex size-10 items-center justify-center rounded-md border border-primary/40 bg-background text-2xl leading-none">
                         {chosen.symbol}
                       </span>
                     )}
-                    <span className="font-medium text-primary">{chosen.label}</span>
+                    <span className="text-base font-semibold text-primary">
+                      {chosen.label}
+                    </span>
                     <span className="text-xs text-muted-foreground">
                       (option #{chosenOption})
                     </span>
@@ -885,6 +874,90 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
+/**
+ * A single candidate on the ballot. Renders as a big touch-friendly
+ * card with:
+ *   - a 56px "poster tile" showing the party emblem / symbol,
+ *   - the candidate's name in large type,
+ *   - a tick indicator on the right that fills in when chosen.
+ *
+ * The radio input is kept for accessibility but visually hidden — the
+ * card itself is the click target.
+ */
+function CandidateCard({
+  index,
+  label,
+  symbol,
+  selected,
+  onSelect,
+  name,
+}: {
+  index: number;
+  label: string;
+  symbol?: string;
+  selected: boolean;
+  onSelect: () => void;
+  name: string;
+}) {
+  return (
+    <label
+      className={`group relative flex cursor-pointer items-center gap-4 rounded-xl border-2 p-4 transition ${
+        selected
+          ? "border-primary bg-primary/10 shadow-sm ring-2 ring-primary/20"
+          : "border-border/70 hover:border-primary/40 hover:bg-muted/30"
+      }`}
+    >
+      <input
+        type="radio"
+        name={name}
+        checked={selected}
+        onChange={onSelect}
+        className="sr-only"
+        aria-label={label}
+      />
+
+      {/* Symbol tile — large, high-contrast, mimics a printed poster. */}
+      <div
+        className={`flex size-14 flex-none items-center justify-center rounded-lg border text-3xl leading-none transition ${
+          selected
+            ? "border-primary/40 bg-background"
+            : "border-border/60 bg-muted/40"
+        }`}
+        aria-hidden
+      >
+        {symbol || <span className="text-muted-foreground/60">·</span>}
+      </div>
+
+      {/* Name + option number. */}
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-base font-semibold leading-tight sm:text-lg">
+          {label}
+        </div>
+        <div className="mt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
+          Option #{index}
+        </div>
+      </div>
+
+      {/* Tick indicator. */}
+      <div
+        className={`flex size-8 flex-none items-center justify-center rounded-full border-2 transition ${
+          selected
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-border/70 bg-background text-muted-foreground/50 group-hover:border-primary/50"
+        }`}
+        aria-hidden
+      >
+        {selected ? (
+          <Check className="size-4" strokeWidth={3} />
+        ) : (
+          <Circle className="size-4 opacity-0" />
+        )}
+      </div>
+    </label>
+  );
+}
+
+
 // ============================================================================
 // Wallet flow (unchanged behaviour, just extracted)
 // ============================================================================
@@ -989,32 +1062,19 @@ function WalletVoteFlow({ defaultElectionId }: { defaultElectionId: number | nul
               )}
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {election.options.map((rawOpt, i) => {
                   const o = decodeOption(rawOpt);
                   return (
-                    <label
+                    <CandidateCard
                       key={i}
-                      className={`flex cursor-pointer items-center gap-3 rounded-md border px-3 py-3 text-sm ${
-                        chosen === i
-                          ? "border-primary/60 bg-primary/5"
-                          : "border-border/70 hover:border-primary/40"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="option"
-                        checked={chosen === i}
-                        onChange={() => setChosen(i)}
-                      />
-                      {o.symbol && (
-                        <span className="inline-flex min-w-[96px] items-center justify-center rounded-md border border-border/60 bg-background px-2 py-1 text-sm font-medium">
-                          {o.symbol}
-                        </span>
-                      )}
-                      <span className="flex-1 font-medium">{o.label}</span>
-                      <span className="text-xs text-muted-foreground">#{i}</span>
-                    </label>
+                      index={i}
+                      label={o.label}
+                      symbol={o.symbol}
+                      selected={chosen === i}
+                      onSelect={() => setChosen(i)}
+                      name="option"
+                    />
                   );
                 })}
               </div>

@@ -46,7 +46,7 @@ export function HomePage() {
           </span>
         </h1>
         <p className="mx-auto mt-4 max-w-lg text-base text-muted-foreground">
-          Vote from a wallet or a basic feature phone. Every tally is
+          Vote from a wallet or with a one-time SMS code. Every tally is
           public and independently auditable.
         </p>
       </section>
@@ -54,23 +54,29 @@ export function HomePage() {
       <section className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <LaneCard
           to="/participate"
-          icon={<VoteIcon className="size-6" />}
+          icon={<VoteIcon className="size-7" />}
           title="Participate in an election"
           description="Cast a ballot, check if you're on the voter roll, or verify a public result."
           cta="Start voting"
           reassurance="Free · takes 30 seconds"
-          accent="from-accent/25 to-transparent"
-          ring="ring-accent/30 group-hover:ring-accent/60"
+          accent="from-accent/40 via-accent/10 to-transparent"
+          ring="ring-accent/50 group-hover:ring-accent/80"
+          border="border-accent/40 group-hover:border-accent/70"
+          glow="shadow-[0_20px_50px_-20px_hsl(var(--accent)/0.45)]"
+          ctaColor="text-accent"
         />
         <LaneCard
           to="/organise"
-          icon={<Landmark className="size-6" />}
+          icon={<Landmark className="size-7" />}
           title="Organise an election"
           description="Enrol voters, register a community, and run a ballot. Small fee + refundable bond."
           cta="Set up an election"
           reassurance="Small fee · bond refunds on close"
-          accent="from-primary/25 to-transparent"
-          ring="ring-primary/30 group-hover:ring-primary/60"
+          accent="from-primary/40 via-primary/10 to-transparent"
+          ring="ring-primary/50 group-hover:ring-primary/80"
+          border="border-primary/40 group-hover:border-primary/70"
+          glow="shadow-[0_20px_50px_-20px_hsl(var(--primary)/0.45)]"
+          ctaColor="text-primary"
         />
       </section>
 
@@ -334,7 +340,9 @@ function TransparencyCard() {
 }
 
 // A big, tappable role card. Extracted so both lanes stay visually
-// identical — same size, same header layout, same CTA row.
+// identical — same size, same header layout, same CTA row. Deliberately
+// more prominent than the trust badges below: thicker accent border,
+// coloured glow, larger icon and CTA.
 function LaneCard({
   to,
   icon,
@@ -344,6 +352,9 @@ function LaneCard({
   reassurance,
   accent,
   ring,
+  border,
+  glow,
+  ctaColor,
 }: {
   to: string;
   icon: React.ReactNode;
@@ -353,6 +364,9 @@ function LaneCard({
   reassurance: string;
   accent: string;
   ring: string;
+  border: string;
+  glow: string;
+  ctaColor: string;
 }) {
   return (
     <Link
@@ -361,27 +375,32 @@ function LaneCard({
     >
       <Card
         className={
-          "relative flex h-full flex-col overflow-hidden transition-all duration-200 " +
-          "group-hover:-translate-y-1 group-hover:border-primary/40 " +
+          "relative flex h-full flex-col overflow-hidden border-2 transition-all duration-200 " +
+          border +
+          " " +
+          glow +
+          " group-hover:-translate-y-1 group-hover:shadow-xl " +
           "group-focus-visible:ring-2 group-focus-visible:ring-ring"
         }
       >
         <div
-          className={`pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b ${accent} opacity-70`}
+          className={`pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b ${accent}`}
           aria-hidden
         />
         <CardHeader className="relative">
           <div
-            className={`mb-3 inline-flex size-11 items-center justify-center rounded-xl bg-background/40 text-foreground ring-1 ${ring} transition`}
+            className={`mb-4 inline-flex size-14 items-center justify-center rounded-2xl bg-background/60 text-foreground ring-2 ${ring} transition backdrop-blur-sm`}
           >
             {icon}
           </div>
-          <CardTitle className="text-xl">{title}</CardTitle>
+          <CardTitle className="text-2xl">{title}</CardTitle>
           <CardDescription className="text-sm">{description}</CardDescription>
         </CardHeader>
         <CardContent className="relative mt-auto flex items-end justify-between pt-2">
           <span className="text-xs text-muted-foreground">{reassurance}</span>
-          <span className="inline-flex items-center gap-1 text-sm font-medium text-primary transition-transform group-hover:translate-x-0.5">
+          <span
+            className={`inline-flex items-center gap-1 text-base font-semibold transition-transform group-hover:translate-x-0.5 ${ctaColor}`}
+          >
             {cta}
             <span aria-hidden>→</span>
           </span>

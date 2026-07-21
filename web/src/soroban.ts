@@ -137,7 +137,17 @@ export function encodeOption(o: OptionMeta): string {
   return JSON.stringify({ l: label, s: symbol });
 }
 
-/** Best-effort inverse of `encodeOption`. */
+/** Best-effort inverse of `encodeOption`. Handles three formats:
+ *   1. New JSON:  `{"l":"Alice","s":"☂"}`
+ *   2. Legacy compound: `"☂ Umbrella"` — symbol is the first grapheme
+ *      cluster / word before the first space.
+ *   3. Plain label with no symbol: `"Alice"`.
+ *
+ * If a JSON symbol field itself contains a compound like `"☂ Umbrella"`
+ * (older organisers picked "emoji + word" defaults), we keep only the
+ * short leading glyph so the ballot / poster / dashboard tile renders
+ * cleanly at a fixed size.
+ */
 export function decodeOption(raw: string): OptionMeta {
   const trimmed = raw.trim();
   if (trimmed.startsWith("{")) {
@@ -146,14 +156,37 @@ export function decodeOption(raw: string): OptionMeta {
       if (p && (typeof p.l === "string" || typeof p.s === "string")) {
         return {
           label: typeof p.l === "string" ? p.l : "",
-          symbol: typeof p.s === "string" ? p.s : "",
+          symbol: shortSymbol(typeof p.s === "string" ? p.s : ""),
         };
       }
     } catch {
       /* fall through — treat as plain label */
     }
   }
+  // Legacy "☂ Umbrella" style: if the first token is short and starts
+  // with a non-alphanumeric character (emoji, punctuation), treat it
+  // as the symbol and the rest as the label.
+  const space = trimmed.indexOf(" ");
+  if (space > 0 && space <= 4) {
+    const head = trimmed.slice(0, space);
+    const tail = trimmed.slice(space + 1).trim();
+    if (tail && !/^[A-Za-z0-9]/.test(head)) {
+      return { label: tail, symbol: head };
+    }
+  }
   return { label: raw, symbol: "" };
+}
+
+// Reduce a possibly-compound symbol like "☂ Umbrella" to just "☂" so
+// it fits in the small tile UI. Leaves genuinely short symbols alone.
+function shortSymbol(s: string): string {
+  const t = s.trim();
+  if (!t) return "";
+  const space = t.indexOf(" ");
+  if (space > 0 && space <= 4 && !/^[A-Za-z0-9]/.test(t)) {
+    return t.slice(0, space);
+  }
+  return t;
 }
 
 export interface CommunityInfo {
