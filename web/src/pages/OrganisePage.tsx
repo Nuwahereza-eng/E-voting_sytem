@@ -104,7 +104,7 @@ export function OrganisePage() {
           step={1}
           icon={<Users className="size-5" />}
           title="Enrol voters"
-          description="Add voters by phone. The bridge issues a custodial key so they vote with just their number."
+          description="Add voters by ID. The bridge issues a custodial key and verifies them by phone."
         />
         <StepCard
           to="/community"
