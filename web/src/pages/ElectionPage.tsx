@@ -462,7 +462,7 @@ export function ElectionPage() {
           <CardTitle className="text-base">Open a new election</CardTitle>
           {cfg && (
             <CardDescription>
-              Fee <b>{stroopsToXlm(cfg.fee)} XLM</b>. Bond from <b>{stroopsToXlm(cfg.bondMin)} XLM</b> (refunded).
+              Fee <b>{stroopsToXlm(cfg.fee)} XLM</b>. Bond from <b>{stroopsToXlm(cfg.bondMin)} XLM</b>, refunded on close.
             </CardDescription>
           )}
         </CardHeader>
@@ -526,11 +526,11 @@ export function ElectionPage() {
             <div className="mb-2 flex items-baseline justify-between gap-3">
               <label className="text-sm font-medium">Candidates</label>
               <span className="text-xs text-muted-foreground">
-                {candidates.filter((c) => c.label.trim()).length} named. Min 2.
+                {candidates.filter((c) => c.label.trim()).length} named. Need at least 2.
               </span>
             </div>
             <p className="mb-3 text-xs text-muted-foreground">
-              Name and symbol per candidate. Symbol prints big on the ballot.
+              Each candidate needs a <b>name</b> and a <b>symbol</b>. The symbol prints big on the ballot for voters who don’t read fluently.
             </p>
             <div className="space-y-3">
               {candidates.map((c, i) => (
@@ -809,7 +809,9 @@ export function ElectionPage() {
         <CardHeader>
           <CardTitle className="text-base">Close an election</CardTitle>
           <CardDescription>
-            Anyone can close after the deadline. Bond refunds to the admin.
+            After the deadline anyone can close and the bond refunds to the admin. If it stays open past the {cfg?.slashGracePeriod ? `${Math.floor(cfg.slashGracePeriod / 3600)}h ` : ""}grace period, any wallet can hit
+            <span className="mx-1 inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-destructive"><Flame className="size-3" />Slash</span>
+            above for a 50% keeper reward.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -956,7 +958,7 @@ function ShareCard({ electionId }: { electionId: number }) {
           <div>
             <CardTitle className="text-base">Election opened. Share the ID.</CardTitle>
             <CardDescription>
-              Voters enter this on the Vote page.
+              Voters enter this ID on the Vote page. Paste any of the below into WhatsApp, SMS, or a printed poster.
             </CardDescription>
           </div>
         </div>

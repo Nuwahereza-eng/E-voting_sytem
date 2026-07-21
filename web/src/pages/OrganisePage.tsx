@@ -104,28 +104,28 @@ export function OrganisePage() {
           step={1}
           icon={<Users className="size-5" />}
           title="Enrol voters"
-          description="Add voters by phone number."
+          description="Add voters by phone. The bridge issues a custodial key so they vote with just their number."
         />
         <StepCard
           to="/community"
           step={2}
           icon={<Landmark className="size-5" />}
           title="Register community"
-          description="Commit the roll on chain."
+          description="Commit the voter roll to Soroban as a Merkle root. Only the root goes on chain."
         />
         <StepCard
           to="/election"
           step={3}
           icon={<Megaphone className="size-5" />}
-          title="Open a ballot"
-          description="Pay the fee, lock the bond."
+          title="Open or close a ballot"
+          description="Pay the fee, lock the bond, run the ballot."
         />
         <StepCard
           to="/attesters"
           step={4}
           icon={<Fingerprint className="size-5" />}
           title="Proof of personhood"
-          description="Optional. Bind wallets to humans."
+          description="Optional. Bind wallets to real humans on chain. Salted hashes only, no PII."
         />
       </div>
     </>

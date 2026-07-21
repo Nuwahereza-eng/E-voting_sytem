@@ -368,7 +368,7 @@ export function OnboardPage() {
         backTo="/organise"
         backLabel="Organise"
         title="Enrol voters"
-        subtitle="One list per community."
+        subtitle="One list per community. Each voter needs an ID and a phone."
       />
 
       {err && (
@@ -391,7 +391,7 @@ export function OnboardPage() {
             <div className="min-w-0 flex-1">
               <CardTitle className="text-base">Voter list</CardTitle>
               <CardDescription>
-                One per community.
+                Keep a separate list for each community.
               </CardDescription>
             </div>
             <Button
@@ -483,7 +483,7 @@ export function OnboardPage() {
             Add voters {activeList && <span className="text-muted-foreground">to {activeList.name}</span>}
           </CardTitle>
           <CardDescription>
-            Name, phone, ID per voter.
+            ID and phone per voter. Same ID on two rows means one voter with two SIMs, one vote.
           </CardDescription>
         </CardHeader>
 
@@ -685,7 +685,13 @@ export function OnboardPage() {
                 Enrolled voters {activeList && <span className="text-muted-foreground">· {activeList.name}</span>}
               </CardTitle>
               <CardDescription>
-                {enrolled ? `${enrolled.length} voter${enrolled.length === 1 ? "" : "s"}.` : "Loading…"}
+                {enrolled ? (
+                  <>
+                    {enrolled.length} voter{enrolled.length === 1 ? "" : "s"}. Removing one changes the Merkle root, so re register the community afterwards.
+                  </>
+                ) : (
+                  <>Loading…</>
+                )}
               </CardDescription>
             </div>
             <Button
@@ -824,7 +830,7 @@ export function OnboardPage() {
           <CardHeader>
             <CardTitle className="text-base">Next: register the community on chain</CardTitle>
             <CardDescription>
-              Commit the roll so eligibility is publicly verifiable.
+              The list lives on the bridge. Commit the Merkle root so eligibility is publicly verifiable.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -842,7 +848,7 @@ export function OnboardPage() {
         open={showNewList}
         onClose={() => setShowNewList(false)}
         title="Create a new list"
-        description="Name it after the community."
+        description="Name it after the community. A class, a chapter, a village."
       >
         <form
           onSubmit={(e) => {
