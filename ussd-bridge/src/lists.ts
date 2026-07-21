@@ -351,3 +351,47 @@ export function findVoterAcrossLists(refNormalized: string): VoterHit[] {
   }
   return hits;
 }
+
+/** Find every occurrence of a **phone number** across every list. This
+ *  supports the "verify by phone" flow — voters register with an ID
+ *  (voterRef) plus a phone, then confirm ownership of that phone via
+ *  SMS OTP. The registry is keyed by msisdn so this is a direct lookup. */
+export function findVoterByPhoneAcrossLists(msisdnNormalized: string): VoterHit[] {
+  const hits: VoterHit[] = [];
+  const i = getIndex();
+  for (const l of i.lists) {
+    const { registryPath, membersPath } = pathsForList(l.id);
+    if (!fs.existsSync(registryPath)) continue;
+    let reg: Record<string, {
+      publicKey: string;
+      secret: string;
+      memberIndex: number;
+      voterRef?: string;
+    }>;
+    try {
+      reg = JSON.parse(fs.readFileSync(registryPath, "utf8"));
+    } catch {
+      continue;
+    }
+    const rec = reg[msisdnNormalized];
+    if (!rec) continue;
+    let members: string[] = [];
+    try {
+      members = JSON.parse(fs.readFileSync(membersPath, "utf8"));
+    } catch {
+      /* ignore */
+    }
+    hits.push({
+      listId: l.id,
+      listName: l.name,
+      communityId: getListCommunity(l.id),
+      memberIndex: rec.memberIndex,
+      publicKey: rec.publicKey,
+      secret: rec.secret,
+      msisdns: [msisdnNormalized],
+      voterRef: rec.voterRef ?? "",
+      members,
+    });
+  }
+  return hits;
+}

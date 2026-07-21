@@ -7,6 +7,7 @@ target/
 .env.*
 !.env.example
 ussd-bridge/data/*.secrets.json
+ussd-bridge/data/**/*.secrets.json
 
 # Build output
 dist/

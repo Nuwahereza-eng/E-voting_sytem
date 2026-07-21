@@ -33,6 +33,7 @@ import {
   getListCommunity,
   setListCommunity,
   findVoterAcrossLists,
+  findVoterByPhoneAcrossLists,
 } from "./lists.js";
 import { issueOtp, maskMsisdn, verifyOtp } from "./otp.js";
 import { sendSms } from "./sms.js";
@@ -722,15 +723,44 @@ app.post("/vote", async (req: Request, res: Response) => {
 // need to remember an election number, and get a fresh code every
 // vote for phishing resistance.
 
-/** POST /otp/request { voterRef } -> issue OTP and SMS it. */
+/** Detect whether the supplied identifier is a phone number rather
+ *  than a national/student ID. Phones enter as `+2567…` or plain
+ *  digits — anything that is a leading `+` followed by digits, or is
+ *  purely digits (>=7 of them), we treat as a phone. */
+function looksLikePhone(raw: string): boolean {
+  const t = raw.trim();
+  if (!t) return false;
+  if (/^\+\d{6,}$/.test(t)) return true;
+  if (/^\d{7,}$/.test(t)) return true;
+  return false;
+}
+
+/** Resolve either a phone number OR a voterRef to a set of voter hits.
+ *  Returns a `{ hits, key }` pair where `key` is the normalised token
+ *  used as the OTP lookup key (so `/otp/verify` and `/vote/by-ref`
+ *  need to use the same normalisation as `/otp/request`). */
+function resolveVoter(
+  rawIdentifier: string,
+): { hits: ReturnType<typeof findVoterAcrossLists>; key: string; kind: "phone" | "ref" } {
+  if (looksLikePhone(rawIdentifier)) {
+    const key = normalize(rawIdentifier);
+    return { hits: findVoterByPhoneAcrossLists(key), key, kind: "phone" };
+  }
+  const key = normalizeRef(rawIdentifier);
+  return { hits: findVoterAcrossLists(key), key, kind: "ref" };
+}
+
+/** POST /otp/request { voterRef } -> issue OTP and SMS it.
+ *  `voterRef` may be either the enrolled voter ID (national/student
+ *  number) or a registered phone number in E.164 form. */
 app.post("/otp/request", async (req: Request, res: Response) => {
   const rawRef = String(req.body?.voterRef ?? "").trim();
   if (!rawRef) return res.status(400).json({ error: "voterRef required" });
-  const ref = normalizeRef(rawRef);
-  const hits = findVoterAcrossLists(ref);
+  const { hits, key: ref, kind } = resolveVoter(rawRef);
   if (hits.length === 0) {
+    const noun = kind === "phone" ? "phone number" : "ID";
     return res.status(404).json({
-      error: `No voter enrolled with ID "${rawRef}". Ask your organiser to enrol you first.`,
+      error: `No voter enrolled with ${noun} "${rawRef}". Ask your organiser to enrol you first.`,
     });
   }
   const allMsisdns = Array.from(new Set(hits.flatMap((h) => h.msisdns)));
@@ -786,14 +816,14 @@ app.post("/otp/verify", (req: Request, res: Response) => {
   // the verify+vote together. We keep this endpoint for parity with
   // the UI, but mark the code as "used" and issue a short-lived
   // session token instead.
-  const r = verifyOtp(normalizeRef(rawRef), code);
+  const r = verifyOtp(resolveVoter(rawRef).key, code);
   if (!r.ok) return res.status(400).json({ error: r.reason });
   // Issue a session token (30s) that /vote/by-ref accepts in lieu of
   // a fresh code. Reusing the OTP store with a longer TTL keeps the
   // whole thing dependency-free.
   const session = crypto.randomBytes(16).toString("hex");
   otpSession.set(session, {
-    ref: normalizeRef(rawRef),
+    ref: resolveVoter(rawRef).key,
     expiresAt: Date.now() + 60_000,
   });
   return res.json({ ok: true, session, expiresIn: 60 });
@@ -892,7 +922,7 @@ app.post("/vote/by-ref", async (req: Request, res: Response) => {
   if (!Number.isInteger(optionIndex) || optionIndex < 0) {
     return res.status(400).json({ error: "optionIndex must be a non-negative integer" });
   }
-  const ref = normalizeRef(rawRef);
+  const { hits, key: ref } = resolveVoter(rawRef);
 
   // Verify OTP (either fresh code or short session token)
   if (session) {
@@ -908,7 +938,6 @@ app.post("/vote/by-ref", async (req: Request, res: Response) => {
     return res.status(400).json({ error: "code or session required" });
   }
 
-  const hits = findVoterAcrossLists(ref);
   if (hits.length === 0) return res.status(404).json({ error: "voter no longer found" });
 
   // Find on-chain election
