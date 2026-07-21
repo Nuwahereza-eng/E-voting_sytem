@@ -75,6 +75,9 @@ export interface ElectionInfo {
   bond: bigint;
   /** True once close_election has refunded the bond to the community admin. */
   bondReturned: boolean;
+  /** True if the bond was slashed (organiser failed to close in time).
+   *  Once slashed, the bond is gone and neither refund nor re-slash is possible. */
+  slashed: boolean;
 }
 
 /** Structured election metadata packed into the on-chain `question`
@@ -203,6 +206,9 @@ export interface ProtocolConfig {
   treasury: string;
   fee: bigint;
   bondMin: bigint;
+  /** Seconds after `closes_at` before the bond becomes slashable by
+   *  any caller (permissionless keeper reward). */
+  slashGracePeriod: number;
 }
 
 export async function readConfig(): Promise<ProtocolConfig> {
@@ -213,12 +219,14 @@ export async function readConfig(): Promise<ProtocolConfig> {
     treasury: string;
     fee: bigint | number;
     bond_min: bigint | number;
+    slash_grace_period?: bigint | number;
   };
   return {
     token: native.token,
     treasury: native.treasury,
     fee: BigInt(native.fee),
     bondMin: BigInt(native.bond_min),
+    slashGracePeriod: Number(native.slash_grace_period ?? 0),
   };
 }
 
@@ -236,6 +244,7 @@ export async function readElection(id: number): Promise<ElectionInfo> {
     total_votes: number;
     bond?: bigint | number;
     bond_returned?: boolean;
+    slashed?: boolean;
   };
   return {
     id,
@@ -250,6 +259,7 @@ export async function readElection(id: number): Promise<ElectionInfo> {
     totalVotes: Number(native.total_votes),
     bond: BigInt(native.bond ?? 0),
     bondReturned: !!native.bond_returned,
+    slashed: !!native.slashed,
   };
 }
 
@@ -408,6 +418,23 @@ export async function closeElection(
 ): Promise<void> {
   const op = contract().call(
     "close_election",
+    nativeToScVal(electionId, { type: "u32" }),
+  );
+  await submit(caller, op, sign);
+}
+
+/** Slash an overdue election. Callable by ANY signed account after
+ *  `closes_at + slashGracePeriod`. The bond is split 50/50 between
+ *  the caller (as a keeper reward) and the protocol treasury. Fails
+ *  if the bond was already returned or already slashed. */
+export async function slashElection(
+  caller: string,
+  electionId: number,
+  sign: SignFn,
+): Promise<void> {
+  const op = contract().call(
+    "slash_election",
+    new Address(caller).toScVal(),
     nativeToScVal(electionId, { type: "u32" }),
   );
   await submit(caller, op, sign);

@@ -48,6 +48,10 @@ pub enum Error {
     BondTooLow = 13,
     BondAlreadyReturned = 14,
     NegativeAmount = 15,
+    /// Slash was attempted before `closes_at + slash_grace_period`.
+    NotOverdue = 16,
+    /// Election was already slashed — bond is gone.
+    AlreadySlashed = 17,
 }
 
 // ---------- Types ----------------------------------------------------------
@@ -64,6 +68,11 @@ pub struct Config {
     pub fee: i128,
     /// Minimum bond an organiser must lock to open an election.
     pub bond_min: i128,
+    /// Seconds after `closes_at` before an election becomes slashable.
+    /// A well-behaved admin closes within this window and recovers the
+    /// bond. A negligent one leaves the bond up for grabs by any
+    /// slash-caller (who takes half; the other half goes to treasury).
+    pub slash_grace_period: u64,
 }
 
 #[contracttype]
@@ -91,6 +100,10 @@ pub struct Election {
     pub bond: i128,
     /// True once the bond has been returned. Prevents double-refund.
     pub bond_returned: bool,
+    /// True if `slash_election` was successfully called. Once slashed,
+    /// the election is permanently marked as such, the bond is gone,
+    /// and neither refund nor re-slash is possible.
+    pub slashed: bool,
 }
 
 #[contracttype]
@@ -118,6 +131,7 @@ impl EVotingContract {
         treasury: Address,
         fee: i128,
         bond_min: i128,
+        slash_grace_period: u64,
     ) -> Result<(), Error> {
         if env.storage().instance().has(&DataKey::Config) {
             return Err(Error::AlreadyInitialized);
@@ -132,6 +146,7 @@ impl EVotingContract {
                 treasury,
                 fee,
                 bond_min,
+                slash_grace_period,
             },
         );
         Ok(())
@@ -271,6 +286,7 @@ impl EVotingContract {
             total_votes: 0,
             bond,
             bond_returned: false,
+            slashed: false,
         };
         env.storage()
             .persistent()
@@ -347,12 +363,18 @@ impl EVotingContract {
     /// Anyone can call this after the deadline (permissionless refund
     /// keeper), but only the community admin can close it early. The
     /// bond always returns to the community admin.
+    ///
+    /// If the election has already been slashed via `slash_election`,
+    /// the bond is gone and this call fails.
     pub fn close_election(env: Env, election_id: u32) -> Result<(), Error> {
         let mut election: Election = env
             .storage()
             .persistent()
             .get(&DataKey::Election(election_id))
             .ok_or(Error::ElectionNotFound)?;
+        if election.slashed {
+            return Err(Error::AlreadySlashed);
+        }
         let community: Community = env
             .storage()
             .persistent()
@@ -384,6 +406,75 @@ impl EVotingContract {
             election.bond_returned = true;
         }
 
+        env.storage()
+            .persistent()
+            .set(&DataKey::Election(election_id), &election);
+        Ok(())
+    }
+
+    /// Slash an overdue election. Callable by ANYONE after
+    /// `closes_at + slash_grace_period`. The bond is split 50/50
+    /// between the caller (as a "keeper reward") and the protocol
+    /// treasury. The election is marked closed and slashed; the
+    /// tally remains queryable, but the bond can never be refunded.
+    ///
+    /// Economic rationale: the bond exists to give an organiser skin
+    /// in the game. If they never close the ballot the results are
+    /// stuck in a "provisional" state — voters can't be sure the
+    /// election is really done. Making the bond claimable by keepers
+    /// after a grace period creates a market for closing overdue
+    /// elections and turns the bond into a real cost for negligence.
+    pub fn slash_election(env: Env, caller: Address, election_id: u32) -> Result<(), Error> {
+        caller.require_auth();
+
+        let mut election: Election = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Election(election_id))
+            .ok_or(Error::ElectionNotFound)?;
+        if election.slashed {
+            return Err(Error::AlreadySlashed);
+        }
+        if election.bond_returned {
+            return Err(Error::BondAlreadyReturned);
+        }
+        let cfg: Config = env
+            .storage()
+            .instance()
+            .get(&DataKey::Config)
+            .ok_or(Error::NotInitialized)?;
+
+        let now = env.ledger().timestamp();
+        let slashable_at = election.closes_at.saturating_add(cfg.slash_grace_period);
+        if now < slashable_at {
+            return Err(Error::NotOverdue);
+        }
+
+        // Split the bond 50/50. On odd amounts the treasury takes the
+        // extra stroop (arbitrary tie-break; matters ~never for real amounts).
+        if election.bond > 0 {
+            let token_client = token::Client::new(&env, &cfg.token);
+            let keeper_reward = election.bond / 2;
+            let treasury_cut = election.bond - keeper_reward;
+            if keeper_reward > 0 {
+                token_client.transfer(
+                    &env.current_contract_address(),
+                    &caller,
+                    &keeper_reward,
+                );
+            }
+            if treasury_cut > 0 {
+                token_client.transfer(
+                    &env.current_contract_address(),
+                    &cfg.treasury,
+                    &treasury_cut,
+                );
+            }
+        }
+
+        election.closed = true;
+        election.slashed = true;
+        // Do NOT set bond_returned — it wasn't returned, it was slashed.
         env.storage()
             .persistent()
             .set(&DataKey::Election(election_id), &election);

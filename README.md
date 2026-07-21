@@ -153,6 +153,21 @@ stellar contract deploy \
 Paste the printed contract ID into `web/.env` (`VITE_CONTRACT_ID`)
 and `ussd-bridge/.env` (`CONTRACT_ID`).
 
+Then initialize it once (the fifth argument is the **bond-slash grace
+period** in seconds — after `closes_at + this` any wallet can slash
+a stuck election and take 50% of the bond as a keeper reward):
+
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> --source <YOUR_IDENTITY> --network testnet \
+  -- initialize \
+  --token   <SAC_TOKEN_ID> \
+  --treasury <TREASURY_ADDRESS> \
+  --fee 5000000 \
+  --bond_min 100000000 \
+  --slash_grace_period 86400
+```
+
 ### 2. Web frontend
 
 ```bash

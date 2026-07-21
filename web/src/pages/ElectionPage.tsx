@@ -5,6 +5,7 @@ import {
   Check,
   Copy,
   ExternalLink,
+  Flame,
   Loader2,
   Plus,
   Printer,
@@ -24,6 +25,7 @@ import {
   readElection,
   readNextCommunityId,
   readNextElectionId,
+  slashElection,
   type CommunityInfo,
   type ElectionInfo,
   type ProtocolConfig,
@@ -254,6 +256,34 @@ export function ElectionPage() {
         returned
           ? `Election ${id} closed. Bond of ${stroopsToXlm(after?.bond ?? 0n)} XLM refunded to admin.`
           : `Election ${id} closed.`,
+      );
+      refreshRecent().catch(() => {});
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doSlash(id: number, bond: bigint) {
+    if (!wallet.address) return;
+    const xlm = stroopsToXlm(bond / 2n);
+    const ok = window.confirm(
+      `Slash election #${id}?\n\n` +
+        `The organiser missed the close deadline (plus grace period).\n` +
+        `The ${stroopsToXlm(bond)} XLM bond will be split 50/50:\n` +
+        `  • ${xlm} XLM keeper reward → YOUR wallet\n` +
+        `  • ${xlm} XLM → protocol treasury\n\n` +
+        `This is irreversible.`,
+    );
+    if (!ok) return;
+    setBusy(true);
+    setErr(null);
+    setCloseResult(null);
+    try {
+      await slashElection(wallet.address, id, wallet.sign);
+      setCloseResult(
+        `Slashed election ${id}. ${stroopsToXlm(bond / 2n)} XLM keeper reward sent to your wallet.`,
       );
       refreshRecent().catch(() => {});
     } catch (e) {
@@ -495,8 +525,17 @@ export function ElectionPage() {
                 </thead>
                 <tbody>
                   {recent.map((e) => {
-                    const isOpen = !e.closed && Date.now() / 1000 < e.closesAt;
-                    const closedForResults = e.closed || Date.now() / 1000 >= e.closesAt;
+                    const nowSec = Date.now() / 1000;
+                    const isOpen = !e.closed && nowSec < e.closesAt;
+                    const closedForResults = e.closed || nowSec >= e.closesAt;
+                    const grace = cfg?.slashGracePeriod ?? 0;
+                    const slashableAt = e.closesAt + grace;
+                    const slashable =
+                      !e.closed &&
+                      !e.slashed &&
+                      !e.bondReturned &&
+                      e.bond > 0n &&
+                      nowSec >= slashableAt;
                     const communityName =
                       myCommunities?.find((c) => c.id === e.communityId)?.name;
                     const decoded = e.options.map((raw) => decodeOption(raw));
@@ -545,10 +584,19 @@ export function ElectionPage() {
                           {communityName ?? `#${e.communityId}`}
                         </td>
                         <td className="px-3 py-2">
-                          {isOpen ? (
+                          {e.slashed ? (
+                            <Badge variant="destructive" title="Bond was slashed — organiser missed the close deadline">
+                              <Flame className="mr-1 size-3" />
+                              slashed
+                            </Badge>
+                          ) : isOpen ? (
                             <Badge variant="success">{untilString(e.closesAt)}</Badge>
                           ) : e.closed ? (
                             <Badge variant="secondary">closed</Badge>
+                          ) : slashable ? (
+                            <Badge variant="destructive" title="Grace period expired — bond is up for grabs">
+                              slashable
+                            </Badge>
                           ) : (
                             <Badge variant="warning">deadline passed</Badge>
                           )}
@@ -558,6 +606,18 @@ export function ElectionPage() {
                         </td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex justify-end gap-1">
+                            {slashable && (
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => doSlash(e.id, e.bond)}
+                                disabled={busy || !wallet.address}
+                                title={`Slash bond — take ${stroopsToXlm(e.bond / 2n)} XLM keeper reward`}
+                              >
+                                <Flame className="size-4" />
+                                Slash
+                              </Button>
+                            )}
                             <Button asChild variant="ghost" size="sm">
                               <Link to={`/vote/${e.id}`} title="Vote page for this election">
                                 <Vote className="size-4" />
@@ -584,6 +644,14 @@ export function ElectionPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Close an election</CardTitle>
+          <CardDescription>
+            Anyone can close after the deadline; the bond returns to the community admin.
+            If the admin never closes it, the bond becomes claimable
+            {cfg?.slashGracePeriod
+              ? ` ${Math.floor(cfg.slashGracePeriod / 3600)}h after the deadline`
+              : " after the grace period"}
+            . Any wallet can then hit <span className="inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-destructive"><Flame className="size-3" />Slash</span> in the table above to collect a 50% keeper reward.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <div>

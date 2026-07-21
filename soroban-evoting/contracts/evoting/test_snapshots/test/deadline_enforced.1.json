@@ -362,6 +362,14 @@
                   },
                   {
                     "key": {
+                      "symbol": "slashed"
+                    },
+                    "val": {
+                      "bool": false
+                    }
+                  },
+                  {
+                    "key": {
                       "symbol": "tallies"
                     },
                     "val": {
@@ -430,6 +438,14 @@
                             },
                             "val": {
                               "i128": "5000000"
+                            }
+                          },
+                          {
+                            "key": {
+                              "symbol": "slash_grace_period"
+                            },
+                            "val": {
+                              "u64": "86400"
                             }
                           },
                           {

@@ -99,6 +99,7 @@ struct Fixture {
 
 const FEE: i128 = 5_000_000; // 0.5 XLM
 const BOND_MIN: i128 = 100_000_000; // 10 XLM
+const SLASH_GRACE: u64 = 86_400; // 24 hours
 
 fn setup() -> Fixture {
     let env = Env::default();
@@ -116,7 +117,7 @@ fn setup() -> Fixture {
 
     let treasury = Address::generate(&env);
 
-    client.initialize(&token_id, &treasury, &FEE, &BOND_MIN);
+    client.initialize(&token_id, &treasury, &FEE, &BOND_MIN, &SLASH_GRACE);
 
     Fixture {
         env,
@@ -171,13 +172,14 @@ fn initialize_records_config() {
     assert_eq!(cfg.treasury, fx.treasury);
     assert_eq!(cfg.fee, FEE);
     assert_eq!(cfg.bond_min, BOND_MIN);
+    assert_eq!(cfg.slash_grace_period, SLASH_GRACE);
 }
 
 #[test]
 fn double_initialize_rejected() {
     let fx = setup();
     let another_treasury = Address::generate(&fx.env);
-    let res = fx.client.try_initialize(&fx.token_id, &another_treasury, &1i128, &1i128);
+    let res = fx.client.try_initialize(&fx.token_id, &another_treasury, &1i128, &1i128, &1u64);
     assert!(res.is_err());
 }
 
@@ -372,4 +374,138 @@ fn close_election_blocks_new_votes() {
     assert!(res.is_err());
 }
 
-// ------ tests -------------------------------------------------------------
+// ------ slashing tests ----------------------------------------------------
+
+#[test]
+fn slash_election_pays_keeper_and_treasury_after_grace() {
+    let fx = setup();
+    let (admin, cid, _, _) = register_with_members(&fx, 3);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+
+    let closes_at = 10_000u64;
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &closes_at,
+        &BOND_MIN,
+    );
+
+    // Fast-forward past the grace period.
+    fx.env
+        .ledger()
+        .with_mut(|l| l.timestamp = closes_at + SLASH_GRACE + 1);
+
+    let keeper = Address::generate(&fx.env);
+    let admin_before = fx.token.balance(&admin);
+    let keeper_before = fx.token.balance(&keeper);
+    let treasury_before = fx.token.balance(&fx.treasury);
+    let contract_before = fx.token.balance(&fx.contract_id);
+
+    fx.client.slash_election(&keeper, &eid);
+
+    let keeper_reward = BOND_MIN / 2;
+    let treasury_cut = BOND_MIN - keeper_reward;
+
+    // Admin gets nothing.
+    assert_eq!(fx.token.balance(&admin), admin_before);
+    // Keeper and treasury split the bond.
+    assert_eq!(fx.token.balance(&keeper) - keeper_before, keeper_reward);
+    assert_eq!(
+        fx.token.balance(&fx.treasury) - treasury_before,
+        treasury_cut
+    );
+    // Contract released the full bond.
+    assert_eq!(
+        contract_before - fx.token.balance(&fx.contract_id),
+        BOND_MIN
+    );
+
+    let info = fx.client.election_info(&eid);
+    assert!(info.closed);
+    assert!(info.slashed);
+    assert!(!info.bond_returned);
+}
+
+#[test]
+fn slash_before_grace_period_rejected() {
+    let fx = setup();
+    let (_admin, cid, _, _) = register_with_members(&fx, 3);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+
+    let closes_at = 10_000u64;
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &closes_at,
+        &BOND_MIN,
+    );
+
+    // Just past deadline, but well inside the grace window.
+    fx.env
+        .ledger()
+        .with_mut(|l| l.timestamp = closes_at + 10);
+
+    let keeper = Address::generate(&fx.env);
+    let res = fx.client.try_slash_election(&keeper, &eid);
+    assert!(res.is_err());
+}
+
+#[test]
+fn slash_after_close_rejected() {
+    let fx = setup();
+    let (_admin, cid, _, _) = register_with_members(&fx, 3);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+
+    let closes_at = 10_000u64;
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &closes_at,
+        &BOND_MIN,
+    );
+
+    // Admin closes normally and gets the bond.
+    fx.env.ledger().with_mut(|l| l.timestamp = closes_at + 1);
+    fx.client.close_election(&eid);
+
+    // Now try to slash — should fail because bond_returned.
+    fx.env
+        .ledger()
+        .with_mut(|l| l.timestamp = closes_at + SLASH_GRACE + 1);
+    let keeper = Address::generate(&fx.env);
+    let res = fx.client.try_slash_election(&keeper, &eid);
+    assert!(res.is_err());
+}
+
+#[test]
+fn close_after_slash_rejected() {
+    let fx = setup();
+    let (_admin, cid, _, _) = register_with_members(&fx, 3);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+
+    let closes_at = 10_000u64;
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &closes_at,
+        &BOND_MIN,
+    );
+
+    fx.env
+        .ledger()
+        .with_mut(|l| l.timestamp = closes_at + SLASH_GRACE + 1);
+    let keeper = Address::generate(&fx.env);
+    fx.client.slash_election(&keeper, &eid);
+
+    // Any further close attempt fails.
+    let res = fx.client.try_close_election(&eid);
+    assert!(res.is_err());
+
+    // Double-slash also fails.
+    let res = fx.client.try_slash_election(&keeper, &eid);
+    assert!(res.is_err());
+}

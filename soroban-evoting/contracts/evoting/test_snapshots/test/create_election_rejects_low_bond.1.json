@@ -233,6 +233,14 @@
                           },
                           {
                             "key": {
+                              "symbol": "slash_grace_period"
+                            },
+                            "val": {
+                              "u64": "86400"
+                            }
+                          },
+                          {
+                            "key": {
                               "symbol": "token"
                             },
                             "val": {
