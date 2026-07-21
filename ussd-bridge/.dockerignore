@@ -1,0 +1,10 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+# Never bake real voter data or custodial secrets into the image.
+# The Fly volume mount at /data will provide the runtime versions.
+data
+npm-debug.log
+.DS_Store
