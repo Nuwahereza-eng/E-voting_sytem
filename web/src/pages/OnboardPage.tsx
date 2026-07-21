@@ -368,7 +368,7 @@ export function OnboardPage() {
         backTo="/organise"
         backLabel="Organise"
         title="Enrol voters"
-        subtitle="Organise voters into named lists. Each voter needs an ID plus a phone."
+        subtitle="One list per community. Each voter needs an ID and a phone."
       />
 
       {err && (
@@ -391,8 +391,7 @@ export function OnboardPage() {
             <div className="min-w-0 flex-1">
               <CardTitle className="text-base">Voter list</CardTitle>
               <CardDescription>
-                Every voter you add belongs to one list. Use separate lists for separate
-                communities (a class, a SACCO chapter, a village council).
+                Use separate lists for separate communities.
               </CardDescription>
             </div>
             <Button
@@ -484,9 +483,7 @@ export function OnboardPage() {
             Add voters {activeList && <span className="text-muted-foreground">to {activeList.name}</span>}
           </CardTitle>
           <CardDescription>
-            Every voter needs an <b>ID number</b> (student, national, or
-            membership) and a <b>phone number</b>. Two rows with the same
-            ID become aliases — one person, two SIMs, one vote.
+            ID + phone per voter. Same ID on two rows = one voter, two SIMs, one vote.
           </CardDescription>
         </CardHeader>
 
@@ -513,7 +510,7 @@ export function OnboardPage() {
                 {showImport ? "Hide paste box" : "Paste CSV text"}
               </Button>
               <span className="text-xs text-muted-foreground">
-                Accepts <i>.xlsx</i>, <i>.xls</i>, <i>.csv</i>. First row can be headers:{" "}
+                xlsx / xls / csv. Headers:{" "}
                 <span className="font-medium">Name, Phone, ID Number</span>. Or type rows below.
               </span>
             </div>
@@ -633,9 +630,7 @@ export function OnboardPage() {
                   Replace the entire list
                 </span>
                 <span className="ml-1 text-xs text-muted-foreground">
-                  Deletes every existing voter in{" "}
-                  <b>{activeList?.name ?? "this list"}</b> before enrolling
-                  the rows above.
+                  Wipes <b>{activeList?.name ?? "this list"}</b> before enrolling.
                 </span>
               </span>
             </label>
@@ -654,7 +649,7 @@ export function OnboardPage() {
                     : `Enrol ${draftCount} voter${draftCount === 1 ? "" : "s"}`}
               </Button>
               <span className="text-xs text-muted-foreground">
-                Enrolling issues a Stellar keypair per voter and updates the Merkle root.
+                Issues a Stellar keypair per voter and updates the Merkle root.
               </span>
             </div>
           </section>
@@ -696,11 +691,11 @@ export function OnboardPage() {
               <CardDescription>
                 {enrolled ? (
                   <>
-                    {enrolled.length} voter{enrolled.length === 1 ? "" : "s"} in this list. Removing
-                    a voter regenerates the Merkle root — remember to re-register the community.
+                    {enrolled.length} voter{enrolled.length === 1 ? "" : "s"}. Removing one changes the
+                    Merkle root — re-register the community afterwards.
                   </>
                 ) : (
-                  <>Loading current voter list…</>
+                  <>Loading…</>
                 )}
               </CardDescription>
             </div>
@@ -840,8 +835,8 @@ export function OnboardPage() {
           <CardHeader>
             <CardTitle className="text-base">Next: register the community on-chain</CardTitle>
             <CardDescription>
-              Your voter list is safely stored by the bridge, but it isn’t verifiable yet. Commit
-              the Merkle root to Soroban so anyone can prove who was eligible.
+              The list is on the bridge but not on-chain yet. Commit the Merkle root so eligibility
+              is publicly verifiable.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -859,7 +854,7 @@ export function OnboardPage() {
         open={showNewList}
         onClose={() => setShowNewList(false)}
         title="Create a new list"
-        description="Give the list a memorable name — a class year, a SACCO chapter, a village. You can switch between lists at any time."
+        description="Name it after the community (a class, chapter, village)."
       >
         <form
           onSubmit={(e) => {

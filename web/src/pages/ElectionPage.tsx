@@ -532,10 +532,9 @@ export function ElectionPage() {
               </span>
             </div>
             <p className="mb-3 text-xs text-muted-foreground">
-              Each candidate needs a <b>name</b> and a <b>symbol</b> (a
-              single emoji). The symbol shows up big on the ballot so
-              voters who can’t read fluently still recognise their
-              candidate.
+              Each candidate needs a <b>name</b> and a <b>symbol</b>. The
+              symbol prints big on the ballot for voters who don’t read
+              fluently.
             </p>
             <div className="space-y-3">
               {candidates.map((c, i) => (
@@ -814,12 +813,11 @@ export function ElectionPage() {
         <CardHeader>
           <CardTitle className="text-base">Close an election</CardTitle>
           <CardDescription>
-            Anyone can close after the deadline; the bond returns to the community admin.
-            If the admin never closes it, the bond becomes claimable
-            {cfg?.slashGracePeriod
-              ? ` ${Math.floor(cfg.slashGracePeriod / 3600)}h after the deadline`
-              : " after the grace period"}
-            . Any wallet can then hit <span className="inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-destructive"><Flame className="size-3" />Slash</span> in the table above to collect a 50% keeper reward.
+            After the deadline anyone can close (bond refunds to the admin). If it stays open past
+            the {cfg?.slashGracePeriod ? `${Math.floor(cfg.slashGracePeriod / 3600)}h ` : ""}
+            grace period, any wallet can hit
+            <span className="mx-1 inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-destructive"><Flame className="size-3" />Slash</span>
+            above for a 50% keeper reward.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -966,8 +964,8 @@ function ShareCard({ electionId }: { electionId: number }) {
           <div>
             <CardTitle className="text-base">Election opened — share the ID</CardTitle>
             <CardDescription>
-              Voters cast their ballot by entering the election ID at the Vote page. Copy any of
-              the below and paste into WhatsApp / SMS / a printed poster.
+              Voters enter this ID on the Vote page. Paste any of the below into WhatsApp, SMS,
+              or a printed poster.
             </CardDescription>
           </div>
         </div>

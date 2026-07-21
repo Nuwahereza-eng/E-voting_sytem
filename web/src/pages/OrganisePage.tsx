@@ -53,8 +53,7 @@ export function OrganisePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Organise</h1>
           <p className="text-sm text-muted-foreground">
-            Three steps: enrol voters, register the community, open a
-            ballot. Do them in one sitting or over weeks.
+            Enrol voters, register the community, open a ballot.
           </p>
         </div>
       </div>
@@ -110,28 +109,28 @@ export function OrganisePage() {
           step={1}
           icon={<Users className="size-5" />}
           title="Enrol voters"
-          description="Add voters by phone. The bridge issues a custodial Stellar key so they can vote from the web using just their number — no wallet install needed."
+          description="Add voters by phone. Bridge issues a custodial key so they vote with just their number."
         />
         <StepCard
           to="/community"
           step={2}
           icon={<Landmark className="size-5" />}
           title="Register community"
-          description="Commit the voter roll to Soroban as a Merkle root. The raw list stays on your device — only the root goes on-chain."
+          description="Commit the voter roll to Soroban as a Merkle root. Only the root goes on-chain."
         />
         <StepCard
           to="/election"
           step={3}
           icon={<Megaphone className="size-5" />}
           title="Open or close a ballot"
-          description="Pay the fee, lock the bond, run the ballot. Anyone can close it after the deadline to trigger the bond refund."
+          description="Pay the fee, lock the bond, run the ballot."
         />
         <StepCard
           to="/attesters"
           step={4}
           icon={<Fingerprint className="size-5" />}
           title="Proof of personhood"
-          description="Optional. Curator + attester console to bind Stellar addresses to real humans on-chain. No PII touches the ledger — only salted-hash nullifiers."
+          description="Optional. Bind wallets to real humans on-chain — salted hashes only, no PII."
         />
       </div>
     </>
