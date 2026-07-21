@@ -35,7 +35,7 @@ export function HomePage() {
 
   return (
     <>
-      <section className="mx-auto max-w-2xl px-2 py-14 text-center">
+      <section className="mx-auto max-w-2xl px-2 pb-10 pt-2 text-center sm:pb-12">
         <Badge variant="outline" className="mb-4">
           <ShieldCheck className="mr-1" /> Verifiable on Stellar
         </Badge>
