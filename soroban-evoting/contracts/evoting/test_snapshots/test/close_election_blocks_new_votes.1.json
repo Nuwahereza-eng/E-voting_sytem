@@ -107,6 +107,9 @@
                 },
                 {
                   "i128": "100000000"
+                },
+                {
+                  "bool": false
                 }
               ]
             }
@@ -377,6 +380,14 @@
                     },
                     "val": {
                       "string": "Q?"
+                    }
+                  },
+                  {
+                    "key": {
+                      "symbol": "require_personhood"
+                    },
+                    "val": {
+                      "bool": false
                     }
                   },
                   {

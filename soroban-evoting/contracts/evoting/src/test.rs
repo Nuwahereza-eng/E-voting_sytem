@@ -201,6 +201,7 @@ fn create_election_pays_fee_and_locks_bond() {
         &default_options(&fx.env),
         &closes_at,
         &BOND_MIN,
+        &false,
     );
     assert_eq!(eid, 0);
 
@@ -226,6 +227,7 @@ fn create_election_rejects_low_bond() {
         &default_options(&fx.env),
         &10_000u64,
         &(BOND_MIN - 1),
+        &false,
     );
     assert!(res.is_err());
 }
@@ -242,6 +244,7 @@ fn close_election_refunds_bond_to_admin() {
         &default_options(&fx.env),
         &10_000u64,
         &BOND_MIN,
+        &false,
     );
 
     let mid_admin = fx.token.balance(&admin);
@@ -275,6 +278,7 @@ fn valid_member_can_vote_and_double_vote_rejected() {
         &default_options(&fx.env),
         &10_000u64,
         &BOND_MIN,
+        &false,
     );
 
     let voter = members[2].clone();
@@ -302,6 +306,7 @@ fn invalid_proof_rejected() {
         &default_options(&fx.env),
         &10_000u64,
         &BOND_MIN,
+        &false,
     );
 
     let outsider = Address::generate(&fx.env);
@@ -322,6 +327,7 @@ fn deadline_enforced() {
         &default_options(&fx.env),
         &500u64,
         &BOND_MIN,
+        &false,
     );
 
     fx.env.ledger().with_mut(|l| l.timestamp = 1_000);
@@ -344,6 +350,7 @@ fn invalid_option_rejected() {
         &default_options(&fx.env),
         &10_000u64,
         &BOND_MIN,
+        &false,
     );
 
     let voter = members[0].clone();
@@ -364,6 +371,7 @@ fn close_election_blocks_new_votes() {
         &default_options(&fx.env),
         &10_000u64,
         &BOND_MIN,
+        &false,
     );
 
     fx.client.close_election(&eid);
@@ -389,6 +397,7 @@ fn slash_election_pays_keeper_and_treasury_after_grace() {
         &default_options(&fx.env),
         &closes_at,
         &BOND_MIN,
+        &false,
     );
 
     // Fast-forward past the grace period.
@@ -440,6 +449,7 @@ fn slash_before_grace_period_rejected() {
         &default_options(&fx.env),
         &closes_at,
         &BOND_MIN,
+        &false,
     );
 
     // Just past deadline, but well inside the grace window.
@@ -465,6 +475,7 @@ fn slash_after_close_rejected() {
         &default_options(&fx.env),
         &closes_at,
         &BOND_MIN,
+        &false,
     );
 
     // Admin closes normally and gets the bond.
@@ -493,6 +504,7 @@ fn close_after_slash_rejected() {
         &default_options(&fx.env),
         &closes_at,
         &BOND_MIN,
+        &false,
     );
 
     fx.env
@@ -507,5 +519,235 @@ fn close_after_slash_rejected() {
 
     // Double-slash also fails.
     let res = fx.client.try_slash_election(&keeper, &eid);
+    assert!(res.is_err());
+}
+
+// ------ personhood-gated voting -------------------------------------------
+//
+// The evoting contract does not depend on the registry crate. For
+// these tests we register a minimal in-file mock that only implements
+// `is_person(Address) -> bool`, storing whether each address should
+// count as a verified human.
+
+mod mock_registry {
+    use soroban_sdk::{contract, contractimpl, contracttype, Address, Env};
+
+    #[contracttype]
+    pub enum MockKey {
+        Person(Address),
+    }
+
+    #[contract]
+    pub struct MockRegistry;
+
+    #[contractimpl]
+    impl MockRegistry {
+        pub fn set_person(env: Env, subject: Address, is: bool) {
+            env.storage().persistent().set(&MockKey::Person(subject), &is);
+        }
+        pub fn is_person(env: Env, subject: Address) -> bool {
+            env.storage()
+                .persistent()
+                .get::<_, bool>(&MockKey::Person(subject))
+                .unwrap_or(false)
+        }
+    }
+}
+
+fn setup_personhood_env(
+    fx: &Fixture,
+) -> (Address, mock_registry::MockRegistryClient<'static>) {
+    let registry_id = fx.env.register(mock_registry::MockRegistry, ());
+    let registry_client = mock_registry::MockRegistryClient::new(&fx.env, &registry_id);
+    fx.client.set_registry(&registry_id);
+    (registry_id, registry_client)
+}
+
+#[test]
+fn require_personhood_blocks_unattested_voter() {
+    let fx = setup();
+    let (_registry_id, _registry) = setup_personhood_env(&fx);
+    let (_admin, cid, members, proofs) = register_with_members(&fx, 3);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &10_000u64,
+        &BOND_MIN,
+        &true, // require_personhood
+    );
+
+    // The voter is on the roll but has no personhood attestation.
+    let voter = members[0].clone();
+    let proof = to_soroban_proof(&fx.env, &proofs[0]);
+    let res = fx.client.try_vote(&voter, &eid, &0u32, &proof);
+    assert!(res.is_err());
+}
+
+#[test]
+fn require_personhood_allows_attested_voter() {
+    let fx = setup();
+    let (_registry_id, registry) = setup_personhood_env(&fx);
+    let (_admin, cid, members, proofs) = register_with_members(&fx, 3);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &10_000u64,
+        &BOND_MIN,
+        &true,
+    );
+
+    let voter = members[1].clone();
+    registry.set_person(&voter, &true);
+    let proof = to_soroban_proof(&fx.env, &proofs[1]);
+    fx.client.vote(&voter, &eid, &0u32, &proof);
+
+    let results = fx.client.results(&eid);
+    assert_eq!(results.get(0).unwrap(), 1);
+}
+
+#[test]
+fn require_personhood_without_registry_fails() {
+    let fx = setup();
+    // NOTE: no set_registry call.
+    let (_admin, cid, members, proofs) = register_with_members(&fx, 3);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &10_000u64,
+        &BOND_MIN,
+        &true,
+    );
+
+    let voter = members[0].clone();
+    let proof = to_soroban_proof(&fx.env, &proofs[0]);
+    let res = fx.client.try_vote(&voter, &eid, &0u32, &proof);
+    assert!(res.is_err());
+}
+
+#[test]
+fn personhood_off_ignores_registry() {
+    let fx = setup();
+    // Registry configured, but the election opts out.
+    let (_registry_id, _registry) = setup_personhood_env(&fx);
+    let (_admin, cid, members, proofs) = register_with_members(&fx, 3);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &10_000u64,
+        &BOND_MIN,
+        &false,
+    );
+
+    // No personhood attestation exists, but the election didn't ask
+    // for one — should succeed.
+    let voter = members[0].clone();
+    let proof = to_soroban_proof(&fx.env, &proofs[0]);
+    fx.client.vote(&voter, &eid, &0u32, &proof);
+    let results = fx.client.results(&eid);
+    assert_eq!(results.get(0).unwrap(), 1);
+}
+
+// ------ extend_election ---------------------------------------------------
+
+#[test]
+fn extend_election_pushes_deadline_and_allows_late_votes() {
+    let fx = setup();
+    let (admin, cid, members, proofs) = register_with_members(&fx, 2);
+
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &500u64,
+        &BOND_MIN,
+        &false,
+    );
+
+    // Push the ledger past the original deadline.
+    fx.env.ledger().with_mut(|l| l.timestamp = 600);
+    // Admin extends: new deadline is 2_000.
+    fx.client.extend_election(&admin, &eid, &2_000u64);
+
+    // Now a vote from an on-roll member should succeed.
+    let voter = members[0].clone();
+    let proof = to_soroban_proof(&fx.env, &proofs[0]);
+    fx.client.vote(&voter, &eid, &0u32, &proof);
+    let results = fx.client.results(&eid);
+    assert_eq!(results.get(0).unwrap(), 1);
+
+    // And the election metadata reflects the new deadline.
+    let e = fx.client.election_info(&eid);
+    assert_eq!(e.closes_at, 2_000);
+}
+
+#[test]
+fn extend_election_rejects_earlier_or_equal_deadline() {
+    let fx = setup();
+    let (admin, cid, _members, _proofs) = register_with_members(&fx, 2);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &500u64,
+        &BOND_MIN,
+        &false,
+    );
+
+    // Equal — must reject.
+    let res = fx.client.try_extend_election(&admin, &eid, &500u64);
+    assert!(res.is_err());
+    // Earlier — must reject.
+    let res = fx.client.try_extend_election(&admin, &eid, &400u64);
+    assert!(res.is_err());
+}
+
+#[test]
+fn extend_election_rejects_non_admin() {
+    let fx = setup();
+    let (_admin, cid, _members, _proofs) = register_with_members(&fx, 2);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &500u64,
+        &BOND_MIN,
+        &false,
+    );
+    let stranger = Address::generate(&fx.env);
+    let res = fx.client.try_extend_election(&stranger, &eid, &1_000u64);
+    assert!(res.is_err());
+}
+
+#[test]
+fn extend_election_rejects_closed_or_slashed() {
+    let fx = setup();
+    let (admin, cid, _members, _proofs) = register_with_members(&fx, 2);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &500u64,
+        &BOND_MIN,
+        &false,
+    );
+    // Close it (as admin, before deadline).
+    fx.client.close_election(&eid);
+    let res = fx.client.try_extend_election(&admin, &eid, &2_000u64);
     assert!(res.is_err());
 }

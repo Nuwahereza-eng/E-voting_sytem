@@ -78,6 +78,10 @@ export interface ElectionInfo {
   /** True if the bond was slashed (organiser failed to close in time).
    *  Once slashed, the bond is gone and neither refund nor re-slash is possible. */
   slashed: boolean;
+  /** True if the election requires an on-chain proof-of-personhood
+   *  attestation from the configured registry before a member may vote.
+   *  When true and the voter has no live attestation, `vote` reverts. */
+  requirePersonhood: boolean;
 }
 
 /** Structured election metadata packed into the on-chain `question`
@@ -129,15 +133,24 @@ export interface OptionMeta {
   label: string;
   /** Short symbol / emoji / party mark — e.g. "☂ Umbrella", "Watch". */
   symbol: string;
+  /** Optional 32-byte hex sha256 of the candidate's face photo, as
+   *  stored on the bridge's `/photos/:hash` endpoint. Kept small
+   *  (~64 chars) to minimise on-chain bytes. */
+  photo?: string;
 }
 
-/** Encode an option as JSON keyed `l`/`s`. Plain-label options (no
- *  symbol) stay as bare strings so we don't waste on-chain bytes. */
+/** Encode an option as JSON keyed `l`/`s`/`p`. Plain-label options
+ *  (no symbol, no photo) stay as bare strings so we don't waste
+ *  on-chain bytes. */
 export function encodeOption(o: OptionMeta): string {
   const label = o.label.trim();
   const symbol = o.symbol.trim();
-  if (!symbol) return label;
-  return JSON.stringify({ l: label, s: symbol });
+  const photo = (o.photo ?? "").trim().toLowerCase();
+  if (!symbol && !photo) return label;
+  const payload: { l: string; s?: string; p?: string } = { l: label };
+  if (symbol) payload.s = symbol;
+  if (photo) payload.p = photo;
+  return JSON.stringify(payload);
 }
 
 /** Best-effort inverse of `encodeOption`. Handles three formats:
@@ -155,11 +168,16 @@ export function decodeOption(raw: string): OptionMeta {
   const trimmed = raw.trim();
   if (trimmed.startsWith("{")) {
     try {
-      const p = JSON.parse(trimmed) as { l?: unknown; s?: unknown };
+      const p = JSON.parse(trimmed) as { l?: unknown; s?: unknown; p?: unknown };
       if (p && (typeof p.l === "string" || typeof p.s === "string")) {
+        const photo =
+          typeof p.p === "string" && /^[0-9a-f]{64}$/i.test(p.p.trim())
+            ? p.p.trim().toLowerCase()
+            : undefined;
         return {
           label: typeof p.l === "string" ? p.l : "",
           symbol: shortSymbol(typeof p.s === "string" ? p.s : ""),
+          photo,
         };
       }
     } catch {
@@ -245,6 +263,7 @@ export async function readElection(id: number): Promise<ElectionInfo> {
     bond?: bigint | number;
     bond_returned?: boolean;
     slashed?: boolean;
+    require_personhood?: boolean;
   };
   return {
     id,
@@ -260,6 +279,7 @@ export async function readElection(id: number): Promise<ElectionInfo> {
     bond: BigInt(native.bond ?? 0),
     bondReturned: !!native.bond_returned,
     slashed: !!native.slashed,
+    requirePersonhood: !!native.require_personhood,
   };
 }
 
@@ -393,6 +413,7 @@ export async function createElection(
   options: string[],
   closesAt: number,
   bond: bigint,
+  requirePersonhood: boolean,
   sign: SignFn,
 ): Promise<number> {
   const op = contract().call(
@@ -404,6 +425,7 @@ export async function createElection(
     ),
     nativeToScVal(closesAt, { type: "u64" }),
     nativeToScVal(bond, { type: "i128" }),
+    xdr.ScVal.scvBool(requirePersonhood),
   );
   const result = await submit(admin, op, sign);
   return Number(scValToNative(result.returnValue!));
@@ -423,6 +445,24 @@ export async function closeElection(
   await submit(caller, op, sign);
 }
 
+/** Extend an election's `closes_at`. Admin-only. `newClosesAt` must be
+ *  strictly later than the current deadline. Fails if the election is
+ *  already closed or slashed. Does not touch bond, roll or tallies. */
+export async function extendElection(
+  admin: string,
+  electionId: number,
+  newClosesAt: number,
+  sign: SignFn,
+): Promise<void> {
+  const op = contract().call(
+    "extend_election",
+    new Address(admin).toScVal(),
+    nativeToScVal(electionId, { type: "u32" }),
+    nativeToScVal(newClosesAt, { type: "u64" }),
+  );
+  await submit(admin, op, sign);
+}
+
 /** Slash an overdue election. Callable by ANY signed account after
  *  `closes_at + slashGracePeriod`. The bond is split 50/50 between
  *  the caller (as a keeper reward) and the protocol treasury. Fails
@@ -438,6 +478,34 @@ export async function slashElection(
     nativeToScVal(electionId, { type: "u32" }),
   );
   await submit(caller, op, sign);
+}
+
+/** Read the registry contract address currently wired into the
+ *  evoting contract, or null if none is set. Personhood-gated
+ *  elections need this to be set. */
+export async function readEvotingRegistry(): Promise<string | null> {
+  const op = contract().call("registry");
+  try {
+    const retval = await simulateRead(op);
+    const native = scValToNative(retval);
+    return (native as string | null) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Set (or replace) the registry contract used for personhood
+ *  lookups. Requires the treasury address on `Config` to sign. */
+export async function setEvotingRegistry(
+  treasury: string,
+  registryContractId: string,
+  sign: SignFn,
+): Promise<void> {
+  const op = contract().call(
+    "set_registry",
+    new Address(registryContractId).toScVal(),
+  );
+  await submit(treasury, op, sign);
 }
 
 export async function submitVote(

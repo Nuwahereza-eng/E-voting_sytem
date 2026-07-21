@@ -4,6 +4,7 @@ import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circ
 import { proofForMember } from "../merkle";
 import { readElection, readNextElectionId, submitVote, type ElectionInfo } from "../soroban";
 import {
+  candidatePhotoUrl,
   fetchMembers,
   fetchVoterElections,
   requestOtp,
@@ -633,6 +634,7 @@ function IdVote({
                       index={i}
                       label={o.label}
                       symbol={o.symbol}
+                      photo={o.photo}
                       selected={chosenOption === i}
                       onSelect={() => setChosenOption(i)}
                       name={`opt-${selected.electionId}`}
@@ -889,6 +891,7 @@ function CandidateCard({
   index,
   label,
   symbol,
+  photo,
   selected,
   onSelect,
   name,
@@ -896,10 +899,12 @@ function CandidateCard({
   index: number;
   label: string;
   symbol?: string;
+  photo?: string;
   selected: boolean;
   onSelect: () => void;
   name: string;
 }) {
+  const photoUrl = candidatePhotoUrl(photo);
   return (
     <label
       className={`group relative flex cursor-pointer items-center gap-4 rounded-xl border-2 p-4 transition ${
@@ -917,22 +922,36 @@ function CandidateCard({
         aria-label={label}
       />
 
-      {/* Symbol tile — large, high-contrast, mimics a printed poster. */}
+      {/* Face photo if uploaded, otherwise a big symbol tile that mimics the printed poster. */}
       <div
-        className={`flex size-14 flex-none items-center justify-center rounded-lg border text-3xl leading-none transition ${
+        className={`flex size-14 flex-none items-center justify-center overflow-hidden rounded-lg border text-3xl leading-none transition ${
           selected
             ? "border-primary/40 bg-background"
             : "border-border/60 bg-muted/40"
         }`}
         aria-hidden
       >
-        {symbol || <span className="text-muted-foreground/60">·</span>}
+        {photoUrl ? (
+          <img src={photoUrl} alt="" className="size-full object-cover" />
+        ) : (
+          symbol || <span className="text-muted-foreground/60">·</span>
+        )}
       </div>
 
-      {/* Name + option number. */}
+      {/* Name + option number. If a photo is shown, the symbol becomes a small badge next to the name. */}
       <div className="min-w-0 flex-1">
-        <div className="truncate text-base font-semibold leading-tight sm:text-lg">
-          {label}
+        <div className="flex items-center gap-2">
+          <div className="truncate text-base font-semibold leading-tight sm:text-lg">
+            {label}
+          </div>
+          {photoUrl && symbol && (
+            <span
+              className="inline-flex size-5 flex-none items-center justify-center rounded-md border border-border/60 bg-muted/40 text-sm leading-none"
+              title={`Symbol: ${symbol}`}
+            >
+              {symbol}
+            </span>
+          )}
         </div>
         <div className="mt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
           Option #{index}
@@ -1072,6 +1091,7 @@ function WalletVoteFlow({ defaultElectionId }: { defaultElectionId: number | nul
                       index={i}
                       label={o.label}
                       symbol={o.symbol}
+                      photo={o.photo}
                       selected={chosen === i}
                       onSelect={() => setChosen(i)}
                       name="option"
@@ -1083,6 +1103,7 @@ function WalletVoteFlow({ defaultElectionId }: { defaultElectionId: number | nul
                 electionId={election.id}
                 chosen={chosen}
                 disabled={!isOpen}
+                requirePersonhood={election.requirePersonhood}
                 onVoted={() => loadElection(election.id)}
               />
               <div className="border-t border-border/60 pt-4">
@@ -1108,11 +1129,13 @@ function WalletVote({
   electionId,
   chosen,
   disabled,
+  requirePersonhood,
   onVoted,
 }: {
   electionId: number;
   chosen: number | null;
   disabled: boolean;
+  requirePersonhood: boolean;
   onVoted: () => void;
 }) {
   const wallet = useWallet();
@@ -1221,9 +1244,21 @@ function WalletVote({
               code above if you were enrolled by ID.
             </div>
           )}
+          {requirePersonhood && verifiedHuman === false && (
+            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              This election requires proof of personhood. Your wallet has no live attestation on the
+              Sauti registry — visit an attester before you can vote here.
+            </div>
+          )}
           <Button
             onClick={cast}
-            disabled={busy || disabled || chosen === null || !inRoll}
+            disabled={
+              busy ||
+              disabled ||
+              chosen === null ||
+              !inRoll ||
+              (requirePersonhood && verifiedHuman !== true)
+            }
           >
             {busy && <Loader2 className="size-4 animate-spin" />}
             {busy ? "Submitting…" : "Cast vote"}

@@ -335,3 +335,28 @@ export async function voteByRef(args: {
   });
   return json(r);
 }
+
+// -------------------- Candidate photos ------------------------------------
+
+/** Absolute URL to a candidate photo previously returned by
+ *  {@link uploadCandidatePhoto}. Returns `null` if `hash` is empty. */
+export function candidatePhotoUrl(hash: string | undefined | null): string | null {
+  if (!hash) return null;
+  if (!/^[0-9a-f]{64}$/i.test(hash)) return null;
+  return url(`/photos/${hash}`);
+}
+
+/** Upload a candidate photo to the bridge. Returns the sha256 hash to
+ *  embed in the on-chain option JSON. Accepts jpeg/png/webp up to
+ *  512 KB. Callers should compress client-side before uploading. */
+export async function uploadCandidatePhoto(
+  file: Blob,
+): Promise<{ hash: string; ext: string; size: number; url: string }> {
+  const mime = file.type || "image/jpeg";
+  const r = await fetch(url("/photos"), {
+    method: "POST",
+    headers: { "content-type": mime },
+    body: file,
+  });
+  return json(r);
+}

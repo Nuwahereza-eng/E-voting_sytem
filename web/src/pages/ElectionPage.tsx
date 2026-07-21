@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   BadgeCheck,
+  CalendarClock,
   Check,
   Copy,
   ExternalLink,
+  Fingerprint,
   Flame,
+  ImagePlus,
   Loader2,
   Plus,
   Printer,
   RefreshCw,
   Share2,
   Trash2,
+  User,
   Vote,
 } from "lucide-react";
 import {
@@ -20,6 +24,7 @@ import {
   encodeElectionQuestion,
   encodeOption,
   decodeOption,
+  extendElection,
   readCommunity,
   readConfig,
   readElection,
@@ -31,6 +36,7 @@ import {
   type ProtocolConfig,
 } from "../soroban";
 import { useWallet } from "../wallet";
+import { candidatePhotoUrl, uploadCandidatePhoto } from "../bridge";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -55,6 +61,39 @@ function stroopsToXlm(s: bigint): string {
   const w = str.slice(0, str.length - 7);
   const f = str.slice(str.length - 7).replace(/0+$/, "");
   return f ? `${w}.${f}` : w;
+}
+
+// Resize an image to a centered square JPEG at `size × size` px. Used
+// before uploading candidate photos so a 4 MB phone snap becomes a
+// ~30 KB avatar. Returns a Blob ready to POST to /photos.
+async function resizeToSquareJpeg(
+  file: Blob,
+  size: number,
+  quality: number,
+): Promise<Blob> {
+  const bitmap = await createImageBitmap(file);
+  const side = Math.min(bitmap.width, bitmap.height);
+  const sx = (bitmap.width - side) / 2;
+  const sy = (bitmap.height - side) / 2;
+  const canvas =
+    typeof OffscreenCanvas !== "undefined"
+      ? new OffscreenCanvas(size, size)
+      : Object.assign(document.createElement("canvas"), { width: size, height: size });
+  const ctx = (canvas as HTMLCanvasElement | OffscreenCanvas)
+    .getContext("2d") as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
+  if (!ctx) throw new Error("Could not get 2D canvas context");
+  ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, size, size);
+  bitmap.close?.();
+  if (canvas instanceof OffscreenCanvas) {
+    return await canvas.convertToBlob({ type: "image/jpeg", quality });
+  }
+  return await new Promise<Blob>((resolve, reject) => {
+    (canvas as HTMLCanvasElement).toBlob(
+      (b) => (b ? resolve(b) : reject(new Error("Failed to encode image"))),
+      "image/jpeg",
+      quality,
+    );
+  });
 }
 
 // Human-readable countdown to a unix epoch. Returns "closed" if in the past.
@@ -94,7 +133,7 @@ export function ElectionPage() {
   // (party emblem, e.g. "☂") so voters who don't read fluently can
   // still pick their person. Symbols are single emoji so they render
   // large on the vote card and on the printed poster.
-  const [candidates, setCandidates] = useState<Array<{ label: string; symbol: string }>>([
+  const [candidates, setCandidates] = useState<Array<{ label: string; symbol: string; photo?: string }>>([
     { label: "Alice Nakato", symbol: "☂" },
     { label: "Bob Okello", symbol: "⌚" },
   ]);
@@ -107,7 +146,45 @@ export function ElectionPage() {
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
   });
   const [bondXlm, setBondXlm] = useState("10");
+  const [requirePersonhood, setRequirePersonhood] = useState(false);
   const [electionId, setElectionId] = useState<number | null>(null);
+
+  // ---- Bond formula --------------------------------------------------
+  // Bond scales with the size and duration of the election so
+  // organisers of small quick polls don't post as much collateral as
+  // organisers of long high-stakes ones. Contract still enforces
+  // `bond >= bondMin`; this is UI-only.
+  //   bond = bondMin
+  //        + 2 XLM × max(0, candidates − 2)
+  //        + 1 XLM × ceil(days_open)
+  const bondBreakdown = useMemo(() => {
+    const baseStroops = cfg?.bondMin ?? 100_000_000n; // 10 XLM fallback
+    const cleanCandidates = candidates.filter((c) => c.label.trim().length > 0);
+    const nCandidates = Math.max(2, cleanCandidates.length);
+    const perCandidateStroops = 20_000_000n; // 2 XLM
+    const perDayStroops = 10_000_000n; // 1 XLM
+    const extraCandidates = BigInt(Math.max(0, nCandidates - 2));
+    const closesAtMs = closesAtLocal ? new Date(closesAtLocal).getTime() : NaN;
+    const days = Number.isNaN(closesAtMs)
+      ? 0n
+      : BigInt(Math.max(0, Math.ceil((closesAtMs - Date.now()) / 86_400_000)));
+    const suggested =
+      baseStroops + perCandidateStroops * extraCandidates + perDayStroops * days;
+    return {
+      base: baseStroops,
+      candidateAdd: perCandidateStroops * extraCandidates,
+      dayAdd: perDayStroops * days,
+      total: suggested,
+      nCandidates,
+      days,
+    };
+  }, [candidates, closesAtLocal, cfg?.bondMin]);
+
+  // Keep the (still-used) bondXlm state in sync with the formula so
+  // the existing submit path picks up the right amount.
+  useEffect(() => {
+    setBondXlm(stroopsToXlm(bondBreakdown.total));
+  }, [bondBreakdown.total]);
 
   // Close form
   const [closeId, setCloseId] = useState("");
@@ -146,7 +223,8 @@ export function ElectionPage() {
     readConfig()
       .then((c) => {
         setCfg(c);
-        setBondXlm(stroopsToXlm(c.bondMin));
+        // bondXlm is auto-derived from cfg.bondMin + candidates + duration
+        // via the bondBreakdown memo; no manual seed needed.
       })
       .catch((e) => setCfgErr(e instanceof Error ? e.message : String(e)));
     refreshRecent().catch(() => {});
@@ -194,7 +272,11 @@ export function ElectionPage() {
     setErr(null);
     try {
       const cleaned = candidates
-        .map((c) => ({ label: c.label.trim(), symbol: c.symbol.trim() }))
+        .map((c) => ({
+          label: c.label.trim(),
+          symbol: c.symbol.trim(),
+          photo: c.photo?.trim() || undefined,
+        }))
         .filter((c) => c.label.length > 0);
       if (cleaned.length < 2) throw new Error("Need at least 2 candidates with a name.");
       const name = electionName.trim();
@@ -226,6 +308,7 @@ export function ElectionPage() {
         encodedOptions,
         closesAt,
         bond,
+        requirePersonhood,
         wallet.sign,
       );
       setElectionId(id);
@@ -284,6 +367,48 @@ export function ElectionPage() {
       await slashElection(wallet.address, id, wallet.sign);
       setCloseResult(
         `Slashed election ${id}. ${stroopsToXlm(bond / 2n)} XLM keeper reward sent to your wallet.`,
+      );
+      refreshRecent().catch(() => {});
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doExtend(id: number, currentClosesAt: number) {
+    if (!wallet.address) return;
+    // Suggest 24h later than the current deadline as a sensible default.
+    const suggested = new Date((currentClosesAt + 86_400) * 1000);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const defaultLocal = `${suggested.getFullYear()}-${pad(suggested.getMonth() + 1)}-${pad(
+      suggested.getDate(),
+    )}T${pad(suggested.getHours())}:${pad(suggested.getMinutes())}`;
+    const raw = window.prompt(
+      `Extend election #${id}\n\n` +
+        `Current deadline: ${new Date(currentClosesAt * 1000).toLocaleString()}\n\n` +
+        `Enter new deadline (YYYY-MM-DDTHH:mm, local time). ` +
+        `Must be later than the current one.`,
+      defaultLocal,
+    );
+    if (!raw) return;
+    const ms = new Date(raw).getTime();
+    if (Number.isNaN(ms)) {
+      setErr("Invalid date/time.");
+      return;
+    }
+    const newClosesAt = Math.floor(ms / 1000);
+    if (newClosesAt <= currentClosesAt) {
+      setErr("New deadline must be later than the current one.");
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    setCloseResult(null);
+    try {
+      await extendElection(wallet.address, id, newClosesAt, wallet.sign);
+      setCloseResult(
+        `Election ${id} deadline extended to ${new Date(newClosesAt * 1000).toLocaleString()}.`,
       );
       refreshRecent().catch(() => {});
     } catch (e) {
@@ -456,15 +581,41 @@ export function ElectionPage() {
               />
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">Bond (XLM)</label>
-              <input
-                type="text"
-                value={bondXlm}
-                onChange={(e) => setBondXlm(e.target.value)}
-                placeholder={cfg ? stroopsToXlm(cfg.bondMin) : "10"}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              />
+              <label className="mb-1 block text-sm font-medium">Bond (auto)</label>
+              <div className="rounded-md border border-input bg-muted/40 px-3 py-2 text-sm">
+                <div className="text-lg font-semibold">
+                  {stroopsToXlm(bondBreakdown.total)} XLM
+                </div>
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {stroopsToXlm(bondBreakdown.base)} base
+                  {bondBreakdown.candidateAdd > 0n && (
+                    <> · +{stroopsToXlm(bondBreakdown.candidateAdd)} for {bondBreakdown.nCandidates} candidates</>
+                  )}
+                  {bondBreakdown.dayAdd > 0n && (
+                    <> · +{stroopsToXlm(bondBreakdown.dayAdd)} for {String(bondBreakdown.days)} day{bondBreakdown.days === 1n ? "" : "s"}</>
+                  )}
+                </div>
+                <div className="mt-1 text-[11px] text-muted-foreground">
+                  Refunded when you close on time · slashed if you miss the deadline.
+                </div>
+              </div>
             </div>
+          </div>
+          <div className="flex items-start gap-2 rounded-md border border-input bg-muted/40 p-3 text-sm">
+            <input
+              id="require-personhood"
+              type="checkbox"
+              checked={requirePersonhood}
+              onChange={(e) => setRequirePersonhood(e.target.checked)}
+              className="mt-0.5 size-4 accent-primary"
+            />
+            <label htmlFor="require-personhood" className="cursor-pointer">
+              <span className="font-medium">Require proof of personhood</span>
+              <span className="block text-xs text-muted-foreground">
+                Voters must hold a live attestation from the registry.
+                Prevents multi-account voting from the same human.
+              </span>
+            </label>
           </div>
           <div className="pt-2">
             <Button onClick={doOpen} disabled={busy || !wallet.address || communityId === null || !cfg}>
@@ -549,6 +700,12 @@ export function ElectionPage() {
                           {e.meta.name && e.meta.title && (
                             <div className="text-xs text-muted-foreground">{e.meta.title}</div>
                           )}
+                          {e.requirePersonhood && (
+                            <Badge variant="secondary" className="mt-1" title="Voters must hold a live personhood attestation">
+                              <Fingerprint className="mr-1 size-3" />
+                              verified humans only
+                            </Badge>
+                          )}
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex flex-wrap gap-1">
@@ -606,6 +763,18 @@ export function ElectionPage() {
                         </td>
                         <td className="px-3 py-2 text-right">
                           <div className="flex justify-end gap-1">
+                            {isOpen && communityName && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => doExtend(e.id, e.closesAt)}
+                                disabled={busy || !wallet.address}
+                                title="Push the close deadline back"
+                              >
+                                <CalendarClock className="size-4" />
+                                Extend
+                              </Button>
+                            )}
                             {slashable && (
                               <Button
                                 variant="destructive"
@@ -853,13 +1022,32 @@ function CandidateEditor({
   onRemove,
 }: {
   index: number;
-  candidate: { label: string; symbol: string };
+  candidate: { label: string; symbol: string; photo?: string };
   canRemove: boolean;
-  onChange: (next: { label: string; symbol: string }) => void;
+  onChange: (next: { label: string; symbol: string; photo?: string }) => void;
   onRemove: () => void;
 }) {
   const nameFilled = candidate.label.trim().length > 0;
   const symbolFilled = candidate.symbol.trim().length > 0;
+  const [uploading, setUploading] = useState(false);
+  const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const photoUrl = candidatePhotoUrl(candidate.photo);
+
+  async function handleFile(file: File | null) {
+    if (!file) return;
+    setUploadErr(null);
+    setUploading(true);
+    try {
+      const compressed = await resizeToSquareJpeg(file, 384, 0.82);
+      const { hash } = await uploadCandidatePhoto(compressed);
+      onChange({ ...candidate, photo: hash });
+    } catch (e) {
+      setUploadErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setUploading(false);
+    }
+  }
+
   return (
     <div
       className={`rounded-lg border p-3 transition ${
@@ -869,10 +1057,14 @@ function CandidateEditor({
       }`}
     >
       <div className="flex items-center gap-3">
-        {/* Poster-style preview tile: shows exactly what voters will see. */}
-        <div className="flex size-14 flex-none items-center justify-center rounded-md border border-border/60 bg-muted/40 text-3xl leading-none">
-          {candidate.symbol.trim() || (
-            <span className="text-muted-foreground/50">?</span>
+        {/* Poster-style preview tile: photo when uploaded, otherwise the symbol. */}
+        <div className="relative flex size-14 flex-none items-center justify-center overflow-hidden rounded-md border border-border/60 bg-muted/40 text-3xl leading-none">
+          {photoUrl ? (
+            <img src={photoUrl} alt="" className="size-full object-cover" />
+          ) : (
+            candidate.symbol.trim() || (
+              <span className="text-muted-foreground/50">?</span>
+            )
           )}
         </div>
 
@@ -903,6 +1095,59 @@ function CandidateEditor({
         >
           <Trash2 className="size-4" />
         </Button>
+      </div>
+
+      {/* Photo upload row */}
+      <div className="mt-3 border-t border-border/50 pt-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Photo
+          </span>
+          <label
+            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium transition hover:border-primary/40 hover:bg-muted/30 ${
+              uploading ? "opacity-60" : ""
+            }`}
+          >
+            {uploading ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : photoUrl ? (
+              <User className="size-3.5" />
+            ) : (
+              <ImagePlus className="size-3.5" />
+            )}
+            {photoUrl ? "Replace" : "Upload"}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) => {
+                void handleFile(e.target.files?.[0] ?? null);
+                e.target.value = "";
+              }}
+              disabled={uploading}
+              className="hidden"
+            />
+          </label>
+          {photoUrl && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onChange({ ...candidate, photo: undefined })}
+              className="h-7 px-2 text-xs"
+              title="Remove photo"
+            >
+              <Trash2 className="size-3.5" />
+              Remove
+            </Button>
+          )}
+          <span className="text-[11px] text-muted-foreground">
+            Optional · resized to 384px before upload.
+          </span>
+        </div>
+        {uploadErr && (
+          <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
+            {uploadErr}
+          </div>
+        )}
       </div>
 
       <div className="mt-3 border-t border-border/50 pt-3">

@@ -24,7 +24,7 @@ use soroban_sdk::{
     contract, contracterror, contractimpl, contracttype,
     token,
     xdr::ToXdr,
-    Address, Bytes, BytesN, Env, String, Vec,
+    Address, Bytes, BytesN, Env, IntoVal, String, Symbol, Vec,
 };
 
 // ---------- Errors ---------------------------------------------------------
@@ -52,6 +52,15 @@ pub enum Error {
     NotOverdue = 16,
     /// Election was already slashed — bond is gone.
     AlreadySlashed = 17,
+    /// Election requires proof-of-personhood but voter has none on file.
+    PersonhoodRequired = 18,
+    /// Election requires personhood but no registry contract has been
+    /// set on this evoting contract yet. Ask the protocol admin.
+    RegistryNotSet = 19,
+    /// `extend_election` was called with a `new_closes_at` that isn't
+    /// strictly later than the current `closes_at` — extensions can
+    /// only push the deadline forward, never earlier.
+    ExtensionNotLater = 20,
 }
 
 // ---------- Types ----------------------------------------------------------
@@ -104,6 +113,11 @@ pub struct Election {
     /// the election is permanently marked as such, the bond is gone,
     /// and neither refund nor re-slash is possible.
     pub slashed: bool,
+    /// If true, `vote` will cross-contract call the registry's
+    /// `is_person(voter)` and reject any voter who lacks a live
+    /// personhood attestation. This turns a plain member-roll ballot
+    /// into a one-human-one-vote ballot on top of the same roll.
+    pub require_personhood: bool,
 }
 
 #[contracttype]
@@ -114,6 +128,11 @@ pub enum DataKey {
     Election(u32),
     Voted(u32, Address),
     Config,
+    /// Address of the SautiRegistry contract used for cross-contract
+    /// `is_person` lookups when an election has `require_personhood`.
+    /// Set by the treasury via `set_registry`. Optional — elections
+    /// without `require_personhood` never touch this.
+    Registry,
 }
 
 // ---------- Contract -------------------------------------------------------
@@ -158,6 +177,28 @@ impl EVotingContract {
             .instance()
             .get(&DataKey::Config)
             .ok_or(Error::NotInitialized)
+    }
+
+    /// Set (or replace) the SautiRegistry contract used for
+    /// proof-of-personhood lookups. Requires the treasury address on
+    /// `Config` to sign — the treasury is effectively the protocol
+    /// admin here. Elections that don't set `require_personhood`
+    /// never call the registry, so this is safe to leave unset if
+    /// personhood-gated voting isn't needed.
+    pub fn set_registry(env: Env, registry: Address) -> Result<(), Error> {
+        let cfg: Config = env
+            .storage()
+            .instance()
+            .get(&DataKey::Config)
+            .ok_or(Error::NotInitialized)?;
+        cfg.treasury.require_auth();
+        env.storage().instance().set(&DataKey::Registry, &registry);
+        Ok(())
+    }
+
+    /// Read the configured registry address, or `None` if unset.
+    pub fn registry(env: Env) -> Option<Address> {
+        env.storage().instance().get(&DataKey::Registry)
     }
 
     /// Register a new community. `merkle_root` commits to the ordered
@@ -221,6 +262,10 @@ impl EVotingContract {
     /// Charges the community admin the protocol fee (sent to treasury)
     /// and locks the supplied `bond` in the contract. The bond is
     /// released back to the admin when `close_election` is called.
+    ///
+    /// Set `require_personhood = true` to gate voting on a live
+    /// personhood attestation in the configured Sauti registry. This
+    /// requires `set_registry` to have been called first.
     pub fn create_election(
         env: Env,
         community_id: u32,
@@ -228,6 +273,7 @@ impl EVotingContract {
         options: Vec<String>,
         closes_at: u64,
         bond: i128,
+        require_personhood: bool,
     ) -> Result<u32, Error> {
         let cfg: Config = env
             .storage()
@@ -287,6 +333,7 @@ impl EVotingContract {
             bond,
             bond_returned: false,
             slashed: false,
+            require_personhood,
         };
         env.storage()
             .persistent()
@@ -346,6 +393,27 @@ impl EVotingContract {
             return Err(Error::InvalidProof);
         }
 
+        // Optional proof-of-personhood gate. When the organiser sets
+        // `require_personhood = true` we cross-contract call the
+        // configured registry's `is_person(voter)` view. This turns a
+        // plain member-roll ballot into a one-human-one-vote ballot
+        // without duplicating the personhood data on this contract.
+        if election.require_personhood {
+            let registry: Address = env
+                .storage()
+                .instance()
+                .get(&DataKey::Registry)
+                .ok_or(Error::RegistryNotSet)?;
+            let is_person: bool = env.invoke_contract(
+                &registry,
+                &Symbol::new(&env, "is_person"),
+                (voter.clone(),).into_val(&env),
+            );
+            if !is_person {
+                return Err(Error::PersonhoodRequired);
+            }
+        }
+
         // Record vote
         env.storage().persistent().set(&voted_key, &true);
         let cur = election.tallies.get(option_index).unwrap_or(0);
@@ -355,6 +423,54 @@ impl EVotingContract {
             .persistent()
             .set(&DataKey::Election(election_id), &election);
 
+        Ok(())
+    }
+
+    /// Extend the voting deadline. Callable only by the community
+    /// admin, and only while the election is still open (not closed,
+    /// not slashed). `new_closes_at` must be strictly later than the
+    /// current `closes_at`; you cannot shorten a window through this
+    /// entry — that would let an organiser cut off legitimate voters.
+    ///
+    /// Extensions do not touch the bond, the roll, or existing votes.
+    /// The slash grace period still runs from `closes_at`, so
+    /// extending automatically pushes the earliest slash time forward
+    /// too.
+    pub fn extend_election(
+        env: Env,
+        admin: Address,
+        election_id: u32,
+        new_closes_at: u64,
+    ) -> Result<(), Error> {
+        admin.require_auth();
+
+        let mut election: Election = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Election(election_id))
+            .ok_or(Error::ElectionNotFound)?;
+        if election.closed {
+            return Err(Error::ElectionClosed);
+        }
+        if election.slashed {
+            return Err(Error::AlreadySlashed);
+        }
+        let community: Community = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Community(election.community_id))
+            .ok_or(Error::CommunityNotFound)?;
+        if community.admin != admin {
+            return Err(Error::NotAuthorized);
+        }
+        if new_closes_at <= election.closes_at {
+            return Err(Error::ExtensionNotLater);
+        }
+
+        election.closes_at = new_closes_at;
+        env.storage()
+            .persistent()
+            .set(&DataKey::Election(election_id), &election);
         Ok(())
     }
 

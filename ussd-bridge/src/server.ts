@@ -103,6 +103,82 @@ app.use(cors());
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
+// ---------------------------------------------------------------------------
+// Candidate photos
+//
+// Small in-house image store keyed by sha256 of the bytes. Organisers
+// upload a face photo per candidate; the bridge returns a hash which
+// is embedded in the on-chain option JSON (~64 bytes on-chain). Voters
+// see the picture via GET /photos/:hash.
+//
+// Design tradeoffs:
+//   - Content-addressed: identical uploads dedupe.
+//   - Server-side type + size caps guard against abuse.
+//   - Stored on the bridge's disk (fine for demo). For decentralisation
+//     later, swap the store for IPFS or an S3 bucket and keep the hash
+//     format compatible.
+// ---------------------------------------------------------------------------
+
+const PHOTOS_DIR = path.resolve(
+  process.env.PHOTOS_DIR ?? path.join(path.dirname(path.resolve(config.membersPath)), "photos"),
+);
+fs.mkdirSync(PHOTOS_DIR, { recursive: true });
+
+const ALLOWED_PHOTO_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+const MAX_PHOTO_BYTES = 512 * 1024; // 512 KB — plenty for a 512×512 avatar
+
+app.post(
+  "/photos",
+  express.raw({
+    type: (req) => req.headers["content-type"]?.toString().startsWith("image/") ?? false,
+    limit: MAX_PHOTO_BYTES,
+  }),
+  (req: Request, res: Response) => {
+    const ct = String(req.headers["content-type"] ?? "").toLowerCase();
+    const ext = ALLOWED_PHOTO_MIME[ct];
+    if (!ext) {
+      return res.status(415).json({
+        error: `unsupported content-type: ${ct}. Use image/jpeg, image/png or image/webp.`,
+      });
+    }
+    const body = req.body as Buffer;
+    if (!Buffer.isBuffer(body) || body.length === 0) {
+      return res.status(400).json({ error: "empty body" });
+    }
+    if (body.length > MAX_PHOTO_BYTES) {
+      return res.status(413).json({ error: `photo exceeds ${MAX_PHOTO_BYTES} bytes` });
+    }
+    const hash = crypto.createHash("sha256").update(body).digest("hex");
+    const filename = `${hash}.${ext}`;
+    const dest = path.join(PHOTOS_DIR, filename);
+    if (!fs.existsSync(dest)) {
+      fs.writeFileSync(dest, body);
+    }
+    res.json({ hash, ext, size: body.length, url: `/photos/${hash}` });
+  },
+);
+
+app.get("/photos/:hash", (req: Request, res: Response) => {
+  const hash = String(req.params.hash ?? "").toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hash)) {
+    return res.status(400).send("invalid hash");
+  }
+  for (const [mime, ext] of Object.entries(ALLOWED_PHOTO_MIME)) {
+    const p = path.join(PHOTOS_DIR, `${hash}.${ext}`);
+    if (fs.existsSync(p)) {
+      res.setHeader("Content-Type", mime);
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      return res.sendFile(p);
+    }
+  }
+  res.status(404).send("photo not found");
+});
+
 // Basic liveness/health
 app.get("/health", (_req, res) => {
   const active = getActive();
