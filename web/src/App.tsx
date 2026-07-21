@@ -27,7 +27,7 @@ function Nav() {
           className="group inline-flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground hover:no-underline"
         >
           <img
-            src="/logo.png"
+            src="/logo.jpg"
             alt=""
             className="h-9 w-9 rounded-lg object-contain transition group-hover:scale-105"
           />
