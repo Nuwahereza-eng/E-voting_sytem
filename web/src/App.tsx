@@ -21,7 +21,7 @@ function Nav() {
   const isMainnet = network.includes("main") || network === "public";
   return (
     <nav className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur">
-      <div className="mx-auto flex h-16 max-w-5xl items-center gap-3 px-5">
+      <div className="mx-auto flex h-20 max-w-5xl items-center gap-3 px-5">
         <Link
           to="/"
           className="group inline-flex items-center hover:no-underline"
@@ -30,7 +30,7 @@ function Nav() {
           <img
             src="/logo.jpg"
             alt="Sauti"
-            className="h-12 w-12 rounded-xl object-contain transition group-hover:scale-105"
+            className="h-16 w-16 rounded-2xl object-contain transition group-hover:scale-105 sm:h-20 sm:w-20"
           />
         </Link>
         <div className="ml-auto flex items-center gap-2">
