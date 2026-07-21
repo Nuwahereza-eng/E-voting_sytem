@@ -204,3 +204,115 @@ on Day 10.
 - If the USSD bridge is not reliable by Day 7, cut to SMS-only rather
   than presenting a flaky live demo — a working narrower channel beats a
   wide one that fails on stage.
+
+---
+
+## 10. Post-hackathon additions (already built)
+
+These landed after the initial build. All are wired end to end (contract
++ frontend + bridge) unless otherwise noted.
+
+### 10.1 Proof-of-personhood gating
+
+- `Election.require_personhood: bool` on the contract, set at
+  `create_election` time (7th arg).
+- Cross-contract `is_person(who)` check invoked from `vote()` against a
+  registry contract set once via `set_registry(registry_id)` from the
+  treasury.
+- New errors: `PersonhoodRequired = 18`, `RegistryNotSet = 19`.
+- Frontend surfaces a **Get verified** CTA on the vote card when the
+  election is gated but the wallet has no live attestation. Registry
+  status link goes to `/attesters`.
+- Recent-elections list badges gated elections with a Fingerprint chip.
+
+### 10.2 Dynamic bond breakdown
+
+- UI-side formula:
+  `bondMin + 20_000_000 · max(0, N-2) + 10_000_000 · ceil(days)`
+  (contract still enforces `bond ≥ bondMin`).
+- Rendered as a live breakdown card in the ElectionPage create form
+  (base + candidates + days), replacing the raw input.
+
+### 10.3 Candidate face photos
+
+- Bridge: content-addressed store at `POST /photos` (image/*, 512 KB
+  cap, sha256 filename) with `GET /photos/:hash` (1-year immutable
+  cache). Rate limit: 30 uploads/IP/min (returns 429 with `Retry-After`).
+- Frontend: `createImageBitmap` + `OffscreenCanvas` resize to 384×384
+  JPEG q=0.82 before upload. `OptionMeta.photo` is a 64-hex sha256
+  stored in the on-chain option JSON.
+- Vote card renders the photo in a 56×56 tile with the symbol as a
+  secondary badge.
+
+### 10.4 Extend an open election
+
+- `extend_election(admin, id, new_closes_at)` — admin-authed, rejects
+  closed/slashed elections and any `new_closes_at <= closes_at`.
+- New error: `ExtensionNotLater = 20`.
+- Frontend: **Extend** button in the recent-elections row (visible to
+  the admin while the election is open) with a prompt for the new
+  deadline.
+
+### 10.5 UX + performance polish
+
+- Route-based lazy loading in `web/src/App.tsx` cut the initial bundle
+  from **298 KB gz → 150 KB gz**.
+- HomePage: empty state for LiveStats + inline 5-step "How it works"
+  strip. Hero padding tightened so the nav band is not empty.
+- Copy passes across OrganisePage, OnboardPage, ElectionPage: fewer
+  words, no hyphens, cards keep short informative descriptions.
+
+### 10.6 Tests
+
+- `cargo test -p evoting` — 23/23 passing, including 4 personhood
+  tests, 4 extend_election tests, and 1 extend+personhood interaction
+  test.
+- `web && npm run build` — clean, ~150 KB gz initial + per-page chunks.
+- `ussd-bridge && npm run typecheck` — clean.
+
+---
+
+## 11. Deploying the current contract
+
+The 10.1/10.4 changes are breaking to on-chain callers (new
+`create_election` signature, new `set_registry` + `extend_election`
+entries). After a rebuild, you must redeploy and reinitialize.
+
+```bash
+# 1. Build the wasm.
+cd soroban-evoting
+cargo build --release --target wasm32v1-none -p evoting
+# → target/wasm32v1-none/release/evoting.wasm
+
+# 2. Deploy to testnet (uses your treasury identity).
+CONTRACT_ID=$(stellar contract deploy \
+  --wasm target/wasm32v1-none/release/evoting.wasm \
+  --source treasury \
+  --network testnet)
+echo "new contract: $CONTRACT_ID"
+
+# 3. Initialize. Pick sensible values; the demo used fee=5 XLM,
+#    bond_min=10 XLM, slash_grace=1h, slash_keeper_bps=5000.
+stellar contract invoke \
+  --id $CONTRACT_ID --source treasury --network testnet -- \
+  initialize \
+  --treasury <TREASURY_G_ADDR> \
+  --fee 50000000 --bond_min 100000000 \
+  --slash_grace_period 3600 --slash_keeper_bps 5000
+
+# 4. Point the evoting contract at the personhood registry so
+#    require_personhood=true elections can validate voters.
+stellar contract invoke \
+  --id $CONTRACT_ID --source treasury --network testnet -- \
+  set_registry --registry <REGISTRY_CONTRACT_ID>
+
+# 5. Update the frontend env.
+#    web/.env.local:
+#      VITE_CONTRACT_ID=<new CONTRACT_ID>
+#      VITE_REGISTRY_ID=<REGISTRY_CONTRACT_ID>
+cd ../web && npm run build
+```
+
+The bridge does not need to be redeployed for contract changes — it
+only holds custodial keys and forwards signed transactions.
+

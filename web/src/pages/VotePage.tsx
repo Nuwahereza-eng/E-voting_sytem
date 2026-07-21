@@ -1245,9 +1245,17 @@ function WalletVote({
             </div>
           )}
           {requirePersonhood && verifiedHuman === false && (
-            <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              This election requires proof of personhood. Your wallet has no live attestation on the
-              Sauti registry — visit an attester before you can vote here.
+            <div className="flex flex-col gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm text-destructive">
+              <div>
+                <b>This election requires proof of personhood.</b> Your wallet has no live
+                attestation on the Sauti registry.
+              </div>
+              <Link to="/attesters" className="no-underline">
+                <Button size="sm" variant="destructive" className="gap-1.5">
+                  <UserCheck className="size-4" />
+                  Get verified
+                </Button>
+              </Link>
             </div>
           )}
           <Button

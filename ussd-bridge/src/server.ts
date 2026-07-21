@@ -132,6 +132,34 @@ const ALLOWED_PHOTO_MIME: Record<string, string> = {
 };
 const MAX_PHOTO_BYTES = 512 * 1024; // 512 KB — plenty for a 512×512 avatar
 
+// Simple in-memory sliding-window rate limiter for POST /photos so a
+// buggy or hostile client can't fill the disk. 30 uploads / IP / minute
+// is enough for a live enrolment session (a few candidates each retry)
+// but blocks the obvious spam patterns.
+const PHOTO_RATE_LIMIT = { max: 30, windowMs: 60_000 };
+const photoRateHits = new Map<string, number[]>();
+function photoRateGate(ip: string): boolean {
+  const now = Date.now();
+  const cutoff = now - PHOTO_RATE_LIMIT.windowMs;
+  const hits = (photoRateHits.get(ip) ?? []).filter((t) => t > cutoff);
+  if (hits.length >= PHOTO_RATE_LIMIT.max) {
+    photoRateHits.set(ip, hits);
+    return false;
+  }
+  hits.push(now);
+  photoRateHits.set(ip, hits);
+  return true;
+}
+// Periodically prune old IP entries to keep the map from growing.
+setInterval(() => {
+  const cutoff = Date.now() - PHOTO_RATE_LIMIT.windowMs;
+  for (const [ip, hits] of photoRateHits) {
+    const fresh = hits.filter((t) => t > cutoff);
+    if (fresh.length === 0) photoRateHits.delete(ip);
+    else photoRateHits.set(ip, fresh);
+  }
+}, PHOTO_RATE_LIMIT.windowMs).unref?.();
+
 app.post(
   "/photos",
   express.raw({
@@ -139,6 +167,13 @@ app.post(
     limit: MAX_PHOTO_BYTES,
   }),
   (req: Request, res: Response) => {
+    const ip = String(req.ip ?? req.socket.remoteAddress ?? "unknown");
+    if (!photoRateGate(ip)) {
+      res.setHeader("Retry-After", String(Math.ceil(PHOTO_RATE_LIMIT.windowMs / 1000)));
+      return res.status(429).json({
+        error: `rate limit: max ${PHOTO_RATE_LIMIT.max} uploads per minute`,
+      });
+    }
     const ct = String(req.headers["content-type"] ?? "").toLowerCase();
     const ext = ALLOWED_PHOTO_MIME[ct];
     if (!ext) {

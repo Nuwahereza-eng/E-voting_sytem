@@ -31,8 +31,6 @@ import {
 // to answer one question — "am I here to vote, or to run an election?"
 // — and then get out of the user's way.
 export function HomePage() {
-  const [showHow, setShowHow] = useState(false);
-
   return (
     <>
       <section className="mx-auto max-w-2xl px-2 pb-10 pt-2 text-center sm:pb-12">
@@ -100,53 +98,40 @@ export function HomePage() {
 
       <LiveStats />
 
-      <div className="mt-8 flex flex-col items-center gap-3 text-center">
-        <Button
-          variant="link"
-          size="sm"
-          onClick={() => setShowHow((v) => !v)}
-        >
-          {showHow ? "Hide how it works" : "How does this work?"}
-        </Button>
-
-        {showHow && (
-          <Card className="w-full max-w-2xl text-left">
-            <CardContent className="pt-6">
-              <ol className="list-decimal space-y-2 pl-5 text-sm leading-relaxed text-muted-foreground">
-                <li>
-                  An organiser enrols voters by phone. The bridge issues
-                  a custodial Stellar key per voter and computes a
-                  Merkle root of the roll.
-                </li>
-                <li>
-                  The organiser pays a fee and locks a bond, then
-                  commits only the root to a Soroban contract — the raw
-                  roll never touches the ledger.
-                </li>
-                <li>
-                  Voters cast a ballot via Freighter, or by entering
-                  their enrolled phone number. Each vote is a signed
-                  transaction on Soroban.
-                </li>
-                <li>
-                  After the deadline anyone can close the election —
-                  tally is contract state, bond is refunded.
-                </li>
-                <li>
-                  Anyone can independently verify the tally at{" "}
-                  <Link to="/verify" className="text-accent hover:underline">
-                    /verify
-                  </Link>
-                  .
-                </li>
-              </ol>
-            </CardContent>
-          </Card>
-        )}
-      </div>
+      <Card className="mt-8">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold">How it works</CardTitle>
+          <CardDescription className="text-xs">
+            Five steps from a name on a list to a public, verifiable tally.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ol className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+            <HowStep n={1} title="Enrol" body="Voters added by ID. Custodial key per voter." />
+            <HowStep n={2} title="Commit" body="Merkle root of the roll goes on chain." />
+            <HowStep n={3} title="Open" body="Organiser pays fee, locks bond, opens ballot." />
+            <HowStep n={4} title="Vote" body="Freighter or SMS. Each vote a signed tx." />
+            <HowStep n={5} title="Verify" body="Anyone can pull the tally from the contract." />
+          </ol>
+        </CardContent>
+      </Card>
 
       <TransparencyCard />
     </>
+  );
+}
+
+function HowStep({ n, title, body }: { n: number; title: string; body: string }) {
+  return (
+    <li className="rounded-md border border-border/60 bg-muted/20 p-3">
+      <div className="mb-1 flex items-center gap-2">
+        <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary ring-1 ring-primary/30">
+          {n}
+        </span>
+        <span className="text-xs font-semibold">{title}</span>
+      </div>
+      <p className="text-[11px] leading-snug text-muted-foreground">{body}</p>
+    </li>
   );
 }
 
@@ -217,7 +202,28 @@ function LiveStats() {
     };
   }, [tick]);
 
-  if (!stats || stats.elections === 0) return null;
+  if (!stats) return null;
+
+  if (stats.elections === 0) {
+    return (
+      <section className="mt-10">
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center gap-2 py-8 text-center">
+            <div className="inline-flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30">
+              <Activity className="size-4" />
+            </div>
+            <div className="text-sm font-semibold">No elections yet on this network</div>
+            <p className="max-w-md text-xs text-muted-foreground">
+              Be the first. Enrol a community and open a ballot — it takes a few minutes.
+            </p>
+            <Link to="/organise" className="mt-1 no-underline">
+              <Button size="sm" variant="secondary">Open the first election</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </section>
+    );
+  }
 
   return (
     <section className="mt-10">

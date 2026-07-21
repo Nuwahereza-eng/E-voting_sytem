@@ -1,17 +1,21 @@
+import { Suspense, lazy } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
-import { ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck } from "lucide-react";
 import { HomePage } from "./pages/HomePage";
-import { ParticipatePage } from "./pages/ParticipatePage";
-import { OrganisePage } from "./pages/OrganisePage";
-import { OnboardPage } from "./pages/OnboardPage";
-import { CommunityPage } from "./pages/CommunityPage";
-import { ElectionPage } from "./pages/ElectionPage";
-import { MyStatusPage } from "./pages/MyStatusPage";
-import { VotePage } from "./pages/VotePage";
-import { VerifyPage } from "./pages/VerifyPage";
-import { AttesterPage } from "./pages/AttesterPage";
 import { Badge } from "@/components/ui/badge";
 import { config as appConfig } from "./config";
+
+// Lazy-load every non-home page so the initial bundle stays small.
+// HomePage is eager because it is the landing route.
+const ParticipatePage = lazy(() => import("./pages/ParticipatePage").then((m) => ({ default: m.ParticipatePage })));
+const OrganisePage = lazy(() => import("./pages/OrganisePage").then((m) => ({ default: m.OrganisePage })));
+const OnboardPage = lazy(() => import("./pages/OnboardPage").then((m) => ({ default: m.OnboardPage })));
+const CommunityPage = lazy(() => import("./pages/CommunityPage").then((m) => ({ default: m.CommunityPage })));
+const ElectionPage = lazy(() => import("./pages/ElectionPage").then((m) => ({ default: m.ElectionPage })));
+const MyStatusPage = lazy(() => import("./pages/MyStatusPage").then((m) => ({ default: m.MyStatusPage })));
+const VotePage = lazy(() => import("./pages/VotePage").then((m) => ({ default: m.VotePage })));
+const VerifyPage = lazy(() => import("./pages/VerifyPage").then((m) => ({ default: m.VerifyPage })));
+const AttesterPage = lazy(() => import("./pages/AttesterPage").then((m) => ({ default: m.AttesterPage })));
 
 // A brand-only top bar. Every navigational choice belongs on the home
 // hub or on the current page — the app has no persistent side menu.
@@ -67,7 +71,15 @@ export function App() {
     <>
       <Nav />
       <div className="mx-auto w-full max-w-5xl px-5 pb-24 pt-8">
-        <Routes>
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-24 text-sm text-muted-foreground">
+              <Loader2 className="mr-2 size-4 animate-spin" />
+              Loading…
+            </div>
+          }
+        >
+          <Routes>
           <Route path="/" element={<HomePage />} />
 
           {/* The two lanes — the only two answers to "why are you here?" */}
@@ -94,6 +106,7 @@ export function App() {
           <Route path="/admin/election" element={<Navigate to="/election" replace />} />
           <Route path="/onboard" element={<Navigate to="/voters" replace />} />
         </Routes>
+        </Suspense>
       </div>
     </>
   );

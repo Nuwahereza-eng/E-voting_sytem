@@ -751,3 +751,51 @@ fn extend_election_rejects_closed_or_slashed() {
     let res = fx.client.try_extend_election(&admin, &eid, &2_000u64);
     assert!(res.is_err());
 }
+
+// ------ extend + personhood interaction -----------------------------------
+
+#[test]
+fn extend_preserves_personhood_requirement() {
+    let fx = setup();
+    let (_registry_id, registry) = setup_personhood_env(&fx);
+    let (admin, cid, members, proofs) = register_with_members(&fx, 3);
+    fx.env.ledger().with_mut(|l| l.timestamp = 100);
+
+    // Open a personhood-gated election.
+    let eid = fx.client.create_election(
+        &cid,
+        &String::from_str(&fx.env, "Q?"),
+        &default_options(&fx.env),
+        &500u64,
+        &BOND_MIN,
+        &true,
+    );
+
+    // Sanity: metadata says gated.
+    let before = fx.client.election_info(&eid);
+    assert!(before.require_personhood);
+
+    // Push past deadline and extend.
+    fx.env.ledger().with_mut(|l| l.timestamp = 600);
+    fx.client.extend_election(&admin, &eid, &2_000u64);
+
+    // Metadata still gated.
+    let after = fx.client.election_info(&eid);
+    assert!(after.require_personhood);
+    assert_eq!(after.closes_at, 2_000);
+
+    // An unattested voter is still blocked after the extension.
+    let unattested = members[0].clone();
+    let proof0 = to_soroban_proof(&fx.env, &proofs[0]);
+    let res = fx.client.try_vote(&unattested, &eid, &0u32, &proof0);
+    assert!(res.is_err());
+
+    // An attested voter can cast during the extended window.
+    let attested = members[1].clone();
+    registry.set_person(&attested, &true);
+    let proof1 = to_soroban_proof(&fx.env, &proofs[1]);
+    fx.client.vote(&attested, &eid, &0u32, &proof1);
+    let results = fx.client.results(&eid);
+    assert_eq!(results.get(0).unwrap(), 1);
+}
+

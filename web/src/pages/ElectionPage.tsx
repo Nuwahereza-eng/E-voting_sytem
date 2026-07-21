@@ -10,6 +10,7 @@ import {
   Flame,
   ImagePlus,
   Loader2,
+  Megaphone,
   Plus,
   Printer,
   RefreshCw,
@@ -651,8 +652,14 @@ export function ElectionPage() {
               Loading elections…
             </div>
           ) : recent.length === 0 ? (
-            <div className="py-8 text-center text-sm text-muted-foreground">
-              No elections yet. Open one above to get an ID.
+            <div className="flex flex-col items-center gap-2 rounded-md border border-dashed border-border/60 py-8 text-center">
+              <div className="inline-flex size-9 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30">
+                <Megaphone className="size-4" />
+              </div>
+              <div className="text-sm font-semibold">No elections yet</div>
+              <p className="max-w-sm text-xs text-muted-foreground">
+                Open your first ballot with the form above. The ID appears here once it is on chain.
+              </p>
             </div>
           ) : (
             <div className="overflow-x-auto rounded-md border border-border/70">
