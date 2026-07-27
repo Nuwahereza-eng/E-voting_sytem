@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circle, UserCheck, Languages } from "lucide-react";
+import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circle, UserCheck, Languages, Trophy } from "lucide-react";
 import { proofForMember } from "../merkle";
 import { readElection, readNextElectionId, submitVote, type ElectionInfo } from "../soroban";
 import {
@@ -1401,10 +1401,71 @@ function WalletVote({
   );
 }
 
+// Winner banner shown above a closed election's tally. Declares the leading
+// candidate outright (voters shouldn't have to eyeball the tallest bar).
+// Handles the no-votes and exact-tie cases explicitly.
+function WinnerBanner({ election }: { election: ElectionInfo }) {
+  const total = election.totalVotes;
+  if (!total || election.tallies.length === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+        <Trophy className="size-5 flex-none" />
+        No votes were cast in this election.
+      </div>
+    );
+  }
+  const top = Math.max(...election.tallies);
+  const winners = election.tallies
+    .map((n, i) => ({ n, i }))
+    .filter((x) => x.n === top);
+
+  if (winners.length > 1) {
+    const names = winners
+      .map((w) => decodeOption(election.options[w.i] ?? "").label)
+      .join(" · ");
+    return (
+      <div className="flex items-start gap-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-yellow-200">
+        <Trophy className="mt-0.5 size-5 flex-none" />
+        <div className="min-w-0">
+          <div className="text-sm font-semibold">
+            Tie — {winners.length} candidates level on {top} vote
+            {top === 1 ? "" : "s"}
+          </div>
+          <div className="mt-0.5 truncate text-xs text-yellow-200/80">{names}</div>
+        </div>
+      </div>
+    );
+  }
+
+  const w = winners[0];
+  const o = decodeOption(election.options[w.i] ?? "");
+  const pct = Math.round((w.n / total) * 100);
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-primary/40 bg-gradient-to-r from-primary/15 to-accent/10 px-4 py-3">
+      <div className="flex size-10 flex-none items-center justify-center rounded-full bg-primary/20 text-primary ring-1 ring-primary/40">
+        <Trophy className="size-5" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+          Winner
+        </div>
+        <div className="flex items-center gap-2 text-base font-bold">
+          {o.symbol && <span className="text-lg">{o.symbol}</span>}
+          <span className="truncate">{o.label}</span>
+        </div>
+        <div className="text-xs text-muted-foreground tabular-nums">
+          {w.n} vote{w.n === 1 ? "" : "s"} · {pct}% of {total}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function TallyBars({ election }: { election: ElectionInfo }) {
   const max = Math.max(1, ...election.tallies);
   return (
     <div className="space-y-2.5">
+      <WinnerBanner election={election} />
       <p className="text-sm text-muted-foreground">
         <span className="tabular-nums text-foreground">
           {election.totalVotes}
