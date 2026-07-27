@@ -5,6 +5,7 @@ import { HomePage } from "./pages/HomePage";
 import { Badge } from "@/components/ui/badge";
 import { config as appConfig } from "./config";
 import { LanguageProvider, useLanguage } from "./lang";
+import { AutoTranslate } from "./autoTranslate";
 
 // Lazy-load every non-home page so the initial bundle stays small.
 // HomePage is eager because it is the landing route.
@@ -76,6 +77,7 @@ function LanguagePicker() {
   return (
     <div
       className="flex items-center gap-1 rounded-md border border-border/60 bg-background/60 px-2 py-1"
+      data-no-translate
       title={
         sunbirdConfigured
           ? "Ballot language (translated by Sunbird AI)"
@@ -90,10 +92,10 @@ function LanguagePicker() {
         id="nav-lang"
         value={lang}
         onChange={(e) => setLang(e.target.value)}
-        className="bg-transparent text-xs font-medium outline-none"
+        className="bg-transparent text-xs font-medium text-foreground outline-none [color-scheme:dark]"
       >
         {languages.map((l) => (
-          <option key={l.code} value={l.code}>
+          <option key={l.code} value={l.code} className="bg-background text-foreground">
             {l.label}
           </option>
         ))}
@@ -102,9 +104,33 @@ function LanguagePicker() {
   );
 }
 
+// Brief full-screen veil shown while the app-wide auto-translate layer
+// fetches strings for a newly-picked language, so switching feels like a
+// deliberate "load" rather than a flicker of English text.
+function TranslatingOverlay() {
+  const { translating, lang, languages } = useLanguage();
+  if (!translating) return null;
+  const label = languages.find((l) => l.code === lang)?.label ?? lang;
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm"
+      role="status"
+      aria-live="polite"
+      data-no-translate
+    >
+      <div className="flex items-center gap-3 rounded-xl border border-border/60 bg-background px-5 py-4 shadow-lg">
+        <Loader2 className="size-5 animate-spin text-primary" />
+        <span className="text-sm font-medium">Loading {label}…</span>
+      </div>
+    </div>
+  );
+}
+
 export function App() {
   return (
     <LanguageProvider>
+      <AutoTranslate />
+      <TranslatingOverlay />
       <Nav />
       <div className="mx-auto w-full max-w-5xl px-5 pb-24 pt-8">
         <Suspense

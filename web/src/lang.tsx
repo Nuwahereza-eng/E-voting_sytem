@@ -42,6 +42,9 @@ interface LanguageContextValue {
   languages: SupportedLanguage[];
   /** Whether the bridge has Sunbird credentials (false = dev stub). */
   sunbirdConfigured: boolean;
+  /** True while the app-wide auto-translate layer is fetching strings. */
+  translating: boolean;
+  setTranslating: (v: boolean) => void;
 }
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
@@ -58,6 +61,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<string>(readInitial);
   const [languages, setLanguages] = useState<SupportedLanguage[]>(FALLBACK_LANGS);
   const [sunbirdConfigured, setSunbirdConfigured] = useState(false);
+  const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +81,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   const setLang = (code: string) => {
     setLangState(code);
+    // Show the loading state immediately so the switch feels responsive;
+    // the auto-translate layer clears it once strings are applied.
+    if (code !== "eng") setTranslating(true);
     try {
       sessionStorage.setItem(STORAGE_KEY, code);
     } catch {
@@ -85,8 +92,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   };
 
   const value = useMemo(
-    () => ({ lang, setLang, languages, sunbirdConfigured }),
-    [lang, languages, sunbirdConfigured],
+    () => ({ lang, setLang, languages, sunbirdConfigured, translating, setTranslating }),
+    [lang, languages, sunbirdConfigured, translating],
   );
 
   return (
