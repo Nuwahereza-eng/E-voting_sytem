@@ -41,4 +41,19 @@ export const config = {
     // demos + local development). Never set this in production.
     devEcho: process.env.OTP_DEV_ECHO === "1",
   },
+  // Sunbird AI (translate + speech-to-text for Ugandan languages).
+  // Provide either SUNBIRD_API_KEY (recommended — the long-lived key you
+  // copy from the Sunbird dashboard) or a SUNBIRD_USERNAME/PASSWORD pair
+  // for on-the-fly OAuth. SUNBIRD_TOKEN is accepted as an alias for
+  // SUNBIRD_API_KEY for backwards compatibility. When none of these
+  // is set the client falls back to a passthrough dev stub so local
+  // demos still work without credentials.
+  sunbird: {
+    baseUrl: process.env.SUNBIRD_BASE_URL ?? "https://api.sunbird.ai",
+    token: process.env.SUNBIRD_API_KEY ?? process.env.SUNBIRD_TOKEN ?? "",
+    username: process.env.SUNBIRD_USERNAME ?? "",
+    password: process.env.SUNBIRD_PASSWORD ?? "",
+  },
+  // Translations cache directory (per-election ballot translations).
+  translationsPath: process.env.TRANSLATIONS_PATH ?? "./data/translations.json",
 };

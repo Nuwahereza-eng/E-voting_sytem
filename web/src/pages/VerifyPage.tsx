@@ -12,6 +12,7 @@ import { decodeElectionQuestion, readElection, type ElectionInfo } from "../soro
 import { TallyBars } from "./VotePage";
 import { lookupAttestation, type Attestation } from "../registry";
 import { config } from "../config";
+import { fetchAnomalies, type AnomalyReport, type AnomalyNote } from "../bridge";
 import { PageHeader } from "@/components/PageHeader";
 
 // Map Soroban contract-error codes emitted by the evoting contract
@@ -336,6 +337,10 @@ export function VerifyPage() {
                 </div>
               )}
 
+              {closedForResults && electionId !== null && (
+                <AuditNotes electionId={electionId} />
+              )}
+
               {config.contractId && (
                 <div className="flex justify-end pt-1">
                   <Button asChild variant="link" size="sm" className="gap-1">
@@ -403,5 +408,104 @@ function VerifySkeleton() {
         ))}
       </CardContent>
     </Card>
+  );
+}
+
+// ============================================================================
+// Anomaly / audit-notes panel
+// ============================================================================
+//
+// Renders the bridge's statistical anomaly report as a collapsible list
+// alongside the tallies. See ussd-bridge/src/anomalies.ts for the
+// underlying heuristics. Notes come with a level (info/warn/alert) so
+// we can style them at three intensities.
+
+function AuditNotes({ electionId }: { electionId: number }) {
+  const [report, setReport] = useState<AnomalyReport | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAnomalies(electionId)
+      .then((r) => {
+        if (!cancelled) setReport(r);
+      })
+      .catch((e) => {
+        if (!cancelled) setErr(e instanceof Error ? e.message : String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [electionId]);
+
+  if (err) {
+    return (
+      <div className="rounded-md border border-dashed border-border/60 bg-muted/10 p-3 text-xs text-muted-foreground">
+        Audit notes unavailable: {err}
+      </div>
+    );
+  }
+  if (!report) return null;
+
+  const hasAlert = report.notes.some((n) => n.level === "alert");
+  const hasWarn = report.notes.some((n) => n.level === "warn");
+  const summary = hasAlert
+    ? `${report.notes.filter((n) => n.level === "alert").length} alert · review needed`
+    : hasWarn
+      ? `${report.notes.filter((n) => n.level === "warn").length} warning`
+      : "No anomalies flagged";
+
+  const barBg = hasAlert
+    ? "border-destructive/40 bg-destructive/10"
+    : hasWarn
+      ? "border-yellow-500/40 bg-yellow-500/10"
+      : "border-border/60 bg-muted/20";
+
+  return (
+    <div className={`rounded-md border ${barBg}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-sm"
+      >
+        <span className="flex items-center gap-2">
+          <Search className="size-4" />
+          <span className="font-medium">Audit notes</span>
+          <span className="text-xs text-muted-foreground">· {summary}</span>
+        </span>
+        <span className="text-xs text-muted-foreground">
+          {report.loggedVotes}/{report.onChainTotal} logged
+        </span>
+      </button>
+      {open && (
+        <ul className="space-y-2 border-t border-border/40 px-3 pb-3 pt-2">
+          {report.notes.map((n, i) => (
+            <li key={i}>
+              <NoteBadge note={n} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function NoteBadge({ note }: { note: AnomalyNote }) {
+  const tone =
+    note.level === "alert"
+      ? "border-destructive/40 bg-destructive/10 text-destructive"
+      : note.level === "warn"
+        ? "border-yellow-500/40 bg-yellow-500/10 text-yellow-300"
+        : "border-border/60 bg-muted/20 text-muted-foreground";
+  const label = note.level.toUpperCase();
+  return (
+    <div className={`rounded-md border ${tone} px-3 py-2 text-xs`}>
+      <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-widest">
+        <span className="rounded bg-background/40 px-1.5 py-0.5">{label}</span>
+        <span className="text-foreground">{note.title}</span>
+      </div>
+      <div className="mt-1 leading-relaxed text-foreground/80">{note.detail}</div>
+    </div>
   );
 }

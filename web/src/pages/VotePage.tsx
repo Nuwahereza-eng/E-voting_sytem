@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circle, UserCheck } from "lucide-react";
+import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circle, UserCheck, Languages } from "lucide-react";
 import { proofForMember } from "../merkle";
 import { readElection, readNextElectionId, submitVote, type ElectionInfo } from "../soroban";
 import {
@@ -9,11 +9,13 @@ import {
   fetchVoterElections,
   requestOtp,
   voteByRef,
+  translateBallot,
   type VoterElection,
 } from "../bridge";
 import { decodeElectionQuestion, decodeOption } from "../soroban";
 import { useWallet } from "../wallet";
 import { isPerson } from "../registry";
+import { useLanguage } from "../lang";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -217,6 +219,69 @@ function IdVote({
   const [chosenOption, setChosenOption] = useState<number | null>(
     persisted.current?.chosenOption ?? null,
   );
+  // Ballot language comes from the global picker in the nav (see lang.tsx),
+  // so a choice made on the landing page carries into the vote flow.
+  const { lang, sunbirdConfigured } = useLanguage();
+
+  // Sunbird translation of the selected ballot for the chosen language.
+  // We own this state in VotePage (not in the picker child) so that when
+  // the async translation arrives the candidate cards re-render with it.
+  const [ballotTx, setBallotTx] = useState<{
+    question: string;
+    options: string[];
+  } | null>(null);
+  const [ballotTxBusy, setBallotTxBusy] = useState(false);
+  const [ballotTxErr, setBallotTxErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    // English is the source language — no translation needed.
+    if (!selected || lang === "eng") {
+      setBallotTx(null);
+      setBallotTxErr(null);
+      setBallotTxBusy(false);
+      return;
+    }
+    const cached = translationCache[selected.electionId]?.[lang];
+    if (cached) {
+      setBallotTx(cached);
+      setBallotTxErr(null);
+      setBallotTxBusy(false);
+      return;
+    }
+    let cancelled = false;
+    setBallotTxBusy(true);
+    setBallotTxErr(null);
+    // Pre-decode labels so we translate readable text, not JSON blobs.
+    const decodedOptions = selected.options.map((raw) => decodeOption(raw).label);
+    const questionMeta = decodeElectionQuestion(selected.question);
+    const decodedQuestion = questionMeta.title || selected.question;
+    translateBallot({
+      electionId: selected.electionId,
+      target: lang,
+      source: { question: decodedQuestion, options: decodedOptions },
+    })
+      .then((r) => {
+        if (cancelled) return;
+        const tx = {
+          question: r.translation.question,
+          options: r.translation.options,
+        };
+        if (!translationCache[selected.electionId]) {
+          translationCache[selected.electionId] = {};
+        }
+        translationCache[selected.electionId][lang] = tx;
+        setBallotTx(tx);
+      })
+      .catch((e) => {
+        if (!cancelled) setBallotTxErr(e instanceof Error ? e.message : String(e));
+      })
+      .finally(() => {
+        if (!cancelled) setBallotTxBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, selected]);
 
   // Live-countdown ticker for the OTP expiry display.
   const [now, setNow] = useState(Date.now());
@@ -645,6 +710,13 @@ function IdVote({
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <BallotLanguagePicker
+                lang={lang}
+                busy={ballotTxBusy}
+                err={ballotTxErr}
+                translatedQuestion={ballotTx?.question ?? null}
+                sunbirdConfigured={sunbirdConfigured}
+              />
               <p className="text-xs text-muted-foreground">
                 Tap your candidate. The symbol on the left is the party emblem printed on the poster.
               </p>
@@ -661,6 +733,7 @@ function IdVote({
                       selected={chosenOption === i}
                       onSelect={() => setChosenOption(i)}
                       name={`opt-${selected.electionId}`}
+                      translation={lang === "eng" ? null : ballotTx?.options?.[i] ?? null}
                     />
                   );
                 })}
@@ -918,6 +991,7 @@ function CandidateCard({
   selected,
   onSelect,
   name,
+  translation,
 }: {
   index: number;
   label: string;
@@ -926,6 +1000,9 @@ function CandidateCard({
   selected: boolean;
   onSelect: () => void;
   name: string;
+  /** Optional Sunbird-translated version of `label`. When present it's
+   *  shown as a subtitle so the voter sees both original + translation. */
+  translation?: string | null;
 }) {
   const photoUrl = candidatePhotoUrl(photo);
   return (
@@ -976,6 +1053,11 @@ function CandidateCard({
             </span>
           )}
         </div>
+        {translation && translation !== label && (
+          <div className="mt-0.5 truncate text-sm text-foreground/70">
+            {translation}
+          </div>
+        )}
         <div className="mt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
           Option #{index}
         </div>
@@ -1352,6 +1434,69 @@ export function TallyBars({ election }: { election: ElectionInfo }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ============================================================================
+// Multilingual ballot rendering (Sunbird translation)
+// ============================================================================
+//
+// The picker lets the voter switch the ballot into Luganda / Acholi /
+// Runyankole / Ateso / Lugbara / Swahili. The bridge caches translations
+// per election so repeated picks are instant. When Sunbird has no
+// credentials the bridge's dev stub prefixes the language code, which
+// still visually confirms the pipeline works end to end.
+
+// Module-level cache: electionId -> lang -> { question, options }.
+// VotePage reads/writes this so repeated language picks are instant.
+const translationCache: Record<number, Record<string, { question: string; options: string[] }>> = {};
+
+// Presentational status panel for the translated ballot. The actual
+// translation is fetched by VotePage (which owns the state so the
+// candidate cards re-render); this just shows busy/error/question. The
+// language itself is chosen from the global picker in the nav.
+function BallotLanguagePicker({
+  lang,
+  busy,
+  err,
+  translatedQuestion,
+  sunbirdConfigured,
+}: {
+  lang: string;
+  busy: boolean;
+  err: string | null;
+  translatedQuestion: string | null;
+  sunbirdConfigured: boolean;
+}) {
+  // English is the source language — nothing to show.
+  if (lang === "eng") return null;
+
+  return (
+    <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-3">
+      <div className="flex items-center gap-2 text-sm">
+        <Languages className="size-4 text-primary" />
+        <span className="font-medium">Translated ballot</span>
+        <span className="text-xs text-muted-foreground">
+          · language chosen in the top bar
+        </span>
+        {busy && <Loader2 className="size-3.5 animate-spin text-muted-foreground" />}
+      </div>
+      {!sunbirdConfigured && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Sunbird API key not configured — translations shown are placeholders.
+          Set <code>SUNBIRD_API_KEY</code> on the bridge for real Ugandan translations.
+        </p>
+      )}
+      {err && (
+        <p className="mt-2 text-xs text-destructive">Translation error: {err}</p>
+      )}
+      {translatedQuestion && !err && (
+        <p className="mt-2 text-sm text-foreground/80">
+          <span className="text-xs uppercase tracking-wide text-muted-foreground">Question · </span>
+          {translatedQuestion}
+        </p>
+      )}
     </div>
   );
 }

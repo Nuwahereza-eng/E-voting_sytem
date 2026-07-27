@@ -4,6 +4,7 @@ import {
   BadgeCheck,
   CalendarClock,
   Check,
+  ChevronDown,
   Copy,
   ExternalLink,
   Fingerprint,
@@ -16,7 +17,6 @@ import {
   RefreshCw,
   Share2,
   Trash2,
-  User,
   Vote,
 } from "lucide-react";
 import {
@@ -195,6 +195,7 @@ export function ElectionPage() {
   const [recent, setRecent] = useState<ElectionInfo[] | null>(null);
   const [recentErr, setRecentErr] = useState<string | null>(null);
   const [loadingRecent, setLoadingRecent] = useState(false);
+  const [showAllRecent, setShowAllRecent] = useState(false);
 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -485,7 +486,6 @@ export function ElectionPage() {
               </div>
             ) : myCommunities.length === 1 ? (
               <div className="flex items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm">
-                <Badge variant="outline">#{myCommunities[0].id}</Badge>
                 <span className="font-medium">{myCommunities[0].name}</span>
                 <span className="ml-auto text-xs text-muted-foreground">
                   {myCommunities[0].memberCount} members
@@ -530,9 +530,6 @@ export function ElectionPage() {
                 {candidates.filter((c) => c.label.trim()).length} named. Need at least 2.
               </span>
             </div>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Each candidate needs a <b>name</b> and a <b>symbol</b>. The symbol prints big on the ballot for voters who don’t read fluently.
-            </p>
             <div className="space-y-3">
               {candidates.map((c, i) => (
                 <CandidateEditor
@@ -609,7 +606,6 @@ export function ElectionPage() {
               <span className="font-medium">Require proof of personhood</span>
               <span className="block text-xs text-muted-foreground">
                 Voters must hold a live attestation from the registry.
-                Prevents multi-account voting from the same human.
               </span>
             </label>
           </div>
@@ -622,8 +618,57 @@ export function ElectionPage() {
         </CardContent>
       </Card>
 
-      {/* -------- Recent elections -------- */}
+      {/* -------- Close an election -------- */}
       <Card className="mb-6">
+        <CardHeader>
+          <CardTitle className="text-base">Close an election</CardTitle>
+          <CardDescription>
+            After the deadline anyone can close and the bond refunds to the admin. If it stays open past the {cfg?.slashGracePeriod ? `${Math.floor(cfg.slashGracePeriod / 3600)}h ` : ""}grace period, any wallet can hit
+            <span className="mx-1 inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-destructive"><Flame className="size-3" />Slash</span>
+            in the list below for a 50% keeper reward.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <label htmlFor="close-picker" className="mb-1 block text-sm font-medium">Which election</label>
+            {recent && recent.some((e) => !e.closed) ? (
+              <select
+                id="close-picker"
+                value={closeId}
+                onChange={(e) => setCloseId(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Select an election to close…</option>
+                {recent
+                  .filter((e) => !e.closed)
+                  .map((e) => (
+                    <option key={e.id} value={String(e.id)}>
+                      {e.meta.name || e.meta.title || e.question}
+                    </option>
+                  ))}
+              </select>
+            ) : (
+              <div className="rounded-md border border-dashed border-border/60 px-3 py-2 text-sm text-muted-foreground">
+                {recent === null ? "Loading elections…" : "No open elections to close."}
+              </div>
+            )}
+          </div>
+          <div>
+            <Button onClick={doClose} disabled={busy || !wallet.address || closeId === ""}>
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              {busy ? "Closing..." : "Close & refund bond"}
+            </Button>
+          </div>
+          {closeResult && (
+            <div className="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
+              {closeResult}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* -------- Recent elections -------- */}
+      <Card>
         <CardHeader>
           <div className="flex flex-wrap items-center gap-3">
             <div className="min-w-0 flex-1">
@@ -668,7 +713,6 @@ export function ElectionPage() {
                   <tr>
                     <th className="px-3 py-2 text-left font-medium">ID</th>
                     <th className="px-3 py-2 text-left font-medium">Name / Title</th>
-                    <th className="px-3 py-2 text-left font-medium">Symbols</th>
                     <th className="px-3 py-2 text-left font-medium">Candidates</th>
                     <th className="px-3 py-2 text-left font-medium">Community</th>
                     <th className="px-3 py-2 text-left font-medium">Status</th>
@@ -677,7 +721,7 @@ export function ElectionPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {recent.map((e) => {
+                  {(showAllRecent ? recent : recent.slice(0, 2)).map((e) => {
                     const nowSec = Date.now() / 1000;
                     const isOpen = !e.closed && nowSec < e.closesAt;
                     const closedForResults = e.closed || nowSec >= e.closesAt;
@@ -710,33 +754,23 @@ export function ElectionPage() {
                           )}
                         </td>
                         <td className="px-3 py-2">
-                          <div className="flex flex-wrap gap-1">
+                          <div className="space-y-1">
                             {preview.map((o, i) => (
-                              <span
-                                key={i}
-                                className="inline-flex size-8 items-center justify-center rounded-md border border-border/60 bg-background text-lg leading-none"
-                                title={o.label}
-                              >
-                                {o.symbol || (
-                                  <span className="text-muted-foreground/50">·</span>
-                                )}
-                              </span>
-                            ))}
-                            {extra > 0 && (
-                              <span className="inline-flex size-8 items-center justify-center rounded-md border border-dashed border-border/60 text-xs text-muted-foreground">
-                                +{extra}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-xs text-muted-foreground">
-                          <div className="space-y-0.5">
-                            {preview.map((o, i) => (
-                              <div key={i} className="truncate">
-                                {o.label}
+                              <div key={i} className="flex items-center gap-2">
+                                <span
+                                  className="inline-flex size-7 flex-none items-center justify-center rounded-md border border-border/60 bg-background text-base leading-none"
+                                  title={o.label}
+                                >
+                                  {o.symbol || (
+                                    <span className="text-muted-foreground/50">·</span>
+                                  )}
+                                </span>
+                                <span className="truncate text-xs text-muted-foreground">{o.label}</span>
                               </div>
                             ))}
-                            {extra > 0 && <div>+{extra} more</div>}
+                            {extra > 0 && (
+                              <div className="text-xs text-muted-foreground">+{extra} more</div>
+                            )}
                           </div>
                         </td>
                         <td className="px-3 py-2 text-muted-foreground">
@@ -808,39 +842,21 @@ export function ElectionPage() {
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* -------- Close an election -------- */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Close an election</CardTitle>
-          <CardDescription>
-            After the deadline anyone can close and the bond refunds to the admin. If it stays open past the {cfg?.slashGracePeriod ? `${Math.floor(cfg.slashGracePeriod / 3600)}h ` : ""}grace period, any wallet can hit
-            <span className="mx-1 inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-destructive"><Flame className="size-3" />Slash</span>
-            above for a 50% keeper reward.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div>
-            <label className="mb-1 block text-sm font-medium">Election ID</label>
-            <input
-              type="number"
-              value={closeId}
-              onChange={(e) => setCloseId(e.target.value)}
-              placeholder="e.g. 0"
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <div>
-            <Button onClick={doClose} disabled={busy || !wallet.address || closeId === ""}>
-              {busy && <Loader2 className="size-4 animate-spin" />}
-              {busy ? "Closing..." : "Close & refund bond"}
-            </Button>
-          </div>
-          {closeResult && (
-            <div className="rounded-md border border-success/40 bg-success/10 px-3 py-2 text-sm text-success">
-              {closeResult}
+          {recent && recent.length > 2 && (
+            <div className="mt-3 flex justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAllRecent((v) => !v)}
+                aria-expanded={showAllRecent}
+              >
+                <ChevronDown
+                  className={`size-4 transition-transform ${showAllRecent ? "rotate-180" : ""}`}
+                />
+                {showAllRecent
+                  ? "Show less"
+                  : `Show all ${recent.length} elections`}
+              </Button>
             </div>
           )}
         </CardContent>
@@ -1029,6 +1045,7 @@ function CandidateEditor({
   const symbolFilled = candidate.symbol.trim().length > 0;
   const [uploading, setUploading] = useState(false);
   const [uploadErr, setUploadErr] = useState<string | null>(null);
+  const [showDetails, setShowDetails] = useState(false);
   const photoUrl = candidatePhotoUrl(candidate.photo);
 
   async function handleFile(file: File | null) {
@@ -1048,40 +1065,67 @@ function CandidateEditor({
 
   return (
     <div
-      className={`rounded-lg border p-3 transition ${
+      className={`rounded-lg border p-2.5 transition ${
         nameFilled && symbolFilled
           ? "border-border/60 bg-background"
           : "border-amber-500/30 bg-amber-500/5"
       }`}
     >
-      <div className="flex items-center gap-3">
-        {/* Poster-style preview tile: photo when uploaded, otherwise the symbol. */}
-        <div className="relative flex size-14 flex-none items-center justify-center overflow-hidden rounded-md border border-border/60 bg-muted/40 text-3xl leading-none">
-          {photoUrl ? (
+      {/* Compact row: photo · name · symbol · details · remove */}
+      <div className="flex items-center gap-2.5">
+        <label
+          title={photoUrl ? "Change photo" : "Add a photo"}
+          className={`group relative flex size-11 flex-none cursor-pointer items-center justify-center overflow-hidden rounded-md border border-border/60 bg-muted/40 text-2xl leading-none transition hover:border-primary/40 ${
+            uploading ? "opacity-60" : ""
+          }`}
+        >
+          {uploading ? (
+            <Loader2 className="size-4 animate-spin text-muted-foreground" />
+          ) : photoUrl ? (
             <img src={photoUrl} alt="" className="size-full object-cover" />
           ) : (
-            candidate.symbol.trim() || (
-              <span className="text-muted-foreground/50">?</span>
-            )
+            <ImagePlus className="size-4 text-muted-foreground/60 transition group-hover:text-primary" />
           )}
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <div className="mb-1 flex items-center gap-2">
-            <span className="inline-flex size-5 items-center justify-center rounded-full bg-primary/15 text-[11px] font-semibold text-primary">
-              {index + 1}
-            </span>
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Candidate {index + 1}
-            </span>
-          </div>
           <input
-            value={candidate.label}
-            onChange={(e) => onChange({ ...candidate, label: e.target.value })}
-            placeholder="Full name (e.g. Alice Nakato)"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            onChange={(e) => {
+              void handleFile(e.target.files?.[0] ?? null);
+              e.target.value = "";
+            }}
+            disabled={uploading}
+            className="hidden"
           />
-        </div>
+        </label>
+
+        <input
+          value={candidate.label}
+          onChange={(e) => onChange({ ...candidate, label: e.target.value })}
+          placeholder={`Candidate ${index + 1} — full name`}
+          className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+        />
+
+        <input
+          value={candidate.symbol}
+          onChange={(e) => onChange({ ...candidate, symbol: e.target.value })}
+          placeholder="☂"
+          maxLength={4}
+          aria-label={`Symbol for candidate ${index + 1}`}
+          className="w-14 flex-none rounded-md border border-input bg-background px-2 py-2 text-center text-lg"
+        />
+
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setShowDetails((v) => !v)}
+          aria-expanded={showDetails}
+          title="Photo & symbol picker"
+          className="flex-none"
+        >
+          <ChevronDown
+            className={`size-4 transition-transform ${showDetails ? "rotate-180" : ""}`}
+          />
+        </Button>
 
         <Button
           variant="ghost"
@@ -1089,102 +1133,72 @@ function CandidateEditor({
           onClick={onRemove}
           disabled={!canRemove}
           title={canRemove ? "Remove candidate" : "Need at least 2 candidates"}
-          className="self-start"
+          className="flex-none"
         >
           <Trash2 className="size-4" />
         </Button>
       </div>
 
-      {/* Photo upload row */}
-      <div className="mt-3 border-t border-border/50 pt-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            Photo
-          </span>
-          <label
-            className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium transition hover:border-primary/40 hover:bg-muted/30 ${
-              uploading ? "opacity-60" : ""
-            }`}
-          >
-            {uploading ? (
-              <Loader2 className="size-3.5 animate-spin" />
-            ) : photoUrl ? (
-              <User className="size-3.5" />
-            ) : (
-              <ImagePlus className="size-3.5" />
-            )}
-            {photoUrl ? "Replace" : "Upload"}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              onChange={(e) => {
-                void handleFile(e.target.files?.[0] ?? null);
-                e.target.value = "";
-              }}
-              disabled={uploading}
-              className="hidden"
-            />
-          </label>
-          {photoUrl && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onChange({ ...candidate, photo: undefined })}
-              className="h-7 px-2 text-xs"
-              title="Remove photo"
-            >
-              <Trash2 className="size-3.5" />
-              Remove
-            </Button>
-          )}
-          <span className="text-[11px] text-muted-foreground">
-            Optional · resized to 384px before upload.
-          </span>
+      {uploadErr && (
+        <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
+          {uploadErr}
         </div>
-        {uploadErr && (
-          <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-1 text-xs text-destructive">
-            {uploadErr}
-          </div>
-        )}
-      </div>
+      )}
 
-      <div className="mt-3 border-t border-border/50 pt-3">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-            Symbol
-          </span>
-          <input
-            value={candidate.symbol}
-            onChange={(e) => onChange({ ...candidate, symbol: e.target.value })}
-            placeholder="☂"
-            maxLength={4}
-            className="w-16 rounded-md border border-input bg-background px-2 py-1 text-center text-lg"
-          />
-          <span className="text-xs text-muted-foreground">
-            or tap one:
-          </span>
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          {SYMBOL_SUGGESTIONS.map((s) => {
-            const active = candidate.symbol.trim() === s;
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onChange({ ...candidate, symbol: s })}
-                className={`flex size-9 items-center justify-center rounded-md border text-xl leading-none transition ${
-                  active
-                    ? "border-primary bg-primary/10"
-                    : "border-border/60 bg-background hover:border-primary/40 hover:bg-muted/30"
-                }`}
-                aria-label={`Use ${s}`}
-              >
-                {s}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {showDetails && (
+        <>
+          {/* Photo controls */}
+          {photoUrl && (
+            <div className="mt-3 border-t border-border/50 pt-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Photo
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onChange({ ...candidate, photo: undefined })}
+                  className="h-7 px-2 text-xs"
+                  title="Remove photo"
+                >
+                  <Trash2 className="size-3.5" />
+                  Remove photo
+                </Button>
+                <span className="text-[11px] text-muted-foreground">
+                  Resized to 384px before upload.
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Symbol picker */}
+          <div className="mt-3 border-t border-border/50 pt-3">
+            <div className="mb-2 text-[11px] uppercase tracking-wider text-muted-foreground">
+              Or tap a symbol
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {SYMBOL_SUGGESTIONS.map((s) => {
+                const active = candidate.symbol.trim() === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => onChange({ ...candidate, symbol: s })}
+                    className={`flex size-9 items-center justify-center rounded-md border text-xl leading-none transition ${
+                      active
+                        ? "border-primary bg-primary/10"
+                        : "border-border/60 bg-background hover:border-primary/40 hover:bg-muted/30"
+                    }`}
+                    aria-label={`Use ${s}`}
+                  >
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

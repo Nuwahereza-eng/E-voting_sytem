@@ -367,3 +367,110 @@ export async function uploadCandidatePhoto(
   });
   return json(r);
 }
+
+// -------------------- Multilingual ballot translation --------------------
+
+export interface SupportedLanguage {
+  code: string;
+  label: string;
+}
+
+/** List the languages Sunbird+the bridge support for ballot translation. */
+export async function fetchLanguages(): Promise<{
+  languages: SupportedLanguage[];
+  sunbirdConfigured: boolean;
+}> {
+  const r = await fetch(url("/languages"));
+  return json(r);
+}
+
+export interface BallotTranslation {
+  question: string;
+  options: string[];
+  sourceHash: string;
+  updatedAt: number;
+}
+
+/** Translate an election's ballot into a target language. The bridge
+ *  caches results, so calling this twice for the same target is cheap.
+ *  Passing `source` lets the caller feed pre-decoded labels (avoids
+ *  translating JSON metadata blobs). */
+export async function translateBallot(args: {
+  electionId: number;
+  target: string;
+  source?: { question: string; options: string[] };
+}): Promise<{
+  electionId: number;
+  lang: string;
+  translation: BallotTranslation;
+  sunbirdConfigured: boolean;
+}> {
+  const r = await fetch(url("/translate/ballot"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(args),
+  });
+  return json(r);
+}
+
+/** Translate a batch of arbitrary UI strings into a target language.
+ *  The bridge caches per (target, text), so repeated interface strings
+ *  are only translated once. Returns translations aligned to `texts`. */
+export async function translateTexts(
+  target: string,
+  texts: string[],
+): Promise<{ target: string; translations: string[] }> {
+  const r = await fetch(url("/translate/text"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ target, texts }),
+  });
+  return json(r);
+}
+
+// -------------------- Anomaly / audit notes --------------------
+
+export interface AnomalyNote {
+  level: "info" | "warn" | "alert";
+  title: string;
+  detail: string;
+}
+
+export interface AnomalyReport {
+  electionId: number;
+  loggedVotes: number;
+  onChainTotal: number;
+  coverage: number;
+  notes: AnomalyNote[];
+}
+
+export async function fetchAnomalies(electionId: number): Promise<AnomalyReport> {
+  const r = await fetch(url(`/anomalies/${electionId}`));
+  return json(r);
+}
+
+// -------------------- Voice IVR simulation (demo) --------------------
+
+export interface VoiceSimulateResult {
+  ok: boolean;
+  choice?: string;
+  match?: { index: number; confidence: number; label: string };
+  tallies?: number[];
+  error?: string;
+}
+
+/** Dev endpoint: run the voice IVR pipeline (matcher + submit) with a
+ *  text transcript instead of a real recorded call. Handy for demos. */
+export async function simulateVoiceVote(args: {
+  callerNumber: string;
+  electionId: number;
+  transcript: string;
+  lang?: string;
+}): Promise<VoiceSimulateResult> {
+  const r = await fetch(url("/voice/simulate"), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(args),
+  });
+  return json(r);
+}

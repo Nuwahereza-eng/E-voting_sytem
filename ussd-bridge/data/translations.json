@@ -1,0 +1,24 @@
+{
+  "0": {
+    "lug": {
+      "question": "Ani akulembera?",
+      "options": [
+        "Alice.",
+        "Bob."
+      ],
+      "sourceHash": "c039cc833685537a",
+      "updatedAt": 1785145496537
+    }
+  },
+  "999999": {
+    "lug": {
+      "question": "Ani alina okubeera ssentebe?",
+      "options": [
+        "Alice.",
+        "Bob."
+      ],
+      "sourceHash": "71e0e4c5dec305bb",
+      "updatedAt": 1785080649068
+    }
+  }
+}

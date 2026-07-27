@@ -1,9 +1,10 @@
 import { Suspense, lazy } from "react";
 import { Link, Navigate, Route, Routes } from "react-router-dom";
-import { Loader2, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldCheck, Languages } from "lucide-react";
 import { HomePage } from "./pages/HomePage";
 import { Badge } from "@/components/ui/badge";
 import { config as appConfig } from "./config";
+import { LanguageProvider, useLanguage } from "./lang";
 
 // Lazy-load every non-home page so the initial bundle stays small.
 // HomePage is eager because it is the landing route.
@@ -33,12 +34,13 @@ function Nav() {
           aria-label="Sauti — home"
         >
           <img
-            src="/logo.jpg"
+            src="/logo-wordmark.svg"
             alt="Sauti"
-            className="h-16 w-16 rounded-2xl object-contain transition group-hover:scale-105 sm:h-20 sm:w-20"
+            className="h-12 w-auto object-contain transition group-hover:scale-105 sm:h-14"
           />
         </Link>
         <div className="ml-auto flex items-center gap-2">
+          <LanguagePicker />
           <Link to="/verify" className="no-underline">
             <Badge
               variant="outline"
@@ -66,9 +68,43 @@ function Nav() {
   );
 }
 
+// A compact ballot-language selector shown in the nav. Its value is the
+// global ballot language used by the Vote page. Placing it here makes it
+// reachable from the landing page and every screen.
+function LanguagePicker() {
+  const { lang, setLang, languages, sunbirdConfigured } = useLanguage();
+  return (
+    <div
+      className="flex items-center gap-1 rounded-md border border-border/60 bg-background/60 px-2 py-1"
+      title={
+        sunbirdConfigured
+          ? "Ballot language (translated by Sunbird AI)"
+          : "Ballot language — Sunbird key not set, translations are placeholders"
+      }
+    >
+      <Languages className="size-3.5 text-primary" aria-hidden />
+      <label htmlFor="nav-lang" className="sr-only">
+        Ballot language
+      </label>
+      <select
+        id="nav-lang"
+        value={lang}
+        onChange={(e) => setLang(e.target.value)}
+        className="bg-transparent text-xs font-medium outline-none"
+      >
+        {languages.map((l) => (
+          <option key={l.code} value={l.code}>
+            {l.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
 export function App() {
   return (
-    <>
+    <LanguageProvider>
       <Nav />
       <div className="mx-auto w-full max-w-5xl px-5 pb-24 pt-8">
         <Suspense
@@ -108,6 +144,6 @@ export function App() {
         </Routes>
         </Suspense>
       </div>
-    </>
+    </LanguageProvider>
   );
 }

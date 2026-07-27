@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowRight,
+  Camera,
+  ChevronDown,
   FileSpreadsheet,
   FolderPlus,
   Loader2,
@@ -10,6 +12,7 @@ import {
   Search,
   Trash2,
   Upload,
+  Users,
   X,
 } from "lucide-react";
 import {
@@ -60,6 +63,12 @@ export function OnboardPage() {
   } | null>(null);
   const [showImport, setShowImport] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Photo OCR import: separate input ref + progress state so it can
+  // coexist with the spreadsheet importer.
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const [photoProgress, setPhotoProgress] = useState(0);
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
 
   // ---- current active list membership summary --------------------------
   const [current, setCurrent] = useState<{ count: number; root: string } | null>(null);
@@ -71,6 +80,11 @@ export function OnboardPage() {
   const [newListName, setNewListName] = useState("");
   const [creatingList, setCreatingList] = useState(false);
   const [confirmDeleteList, setConfirmDeleteList] = useState<VoterList | null>(null);
+  // Secondary panels collapse by default so the page leads with the
+  // primary task — enrolling voters. The organiser opens list
+  // management or the enrolled-voter roster on demand.
+  const [showListManager, setShowListManager] = useState(false);
+  const [showEnrolled, setShowEnrolled] = useState(false);
 
   // ---- enrolled voters + selection --------------------------------------
   const [enrolled, setEnrolled] = useState<EnrolledVoter[] | null>(null);
@@ -214,6 +228,48 @@ export function OnboardPage() {
       setErr(`Could not parse ${file.name}: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
+  /**
+   * OCR a photo of a printed voter roll into draft rows. Runs entirely
+   * client-side via tesseract.js (no upload). Populates the draft table
+   * so the organiser can edit before enrolment — we deliberately don't
+   * enrol directly from OCR output.
+   */
+  async function onPhotoPicked(file: File | null) {
+    if (!file) return;
+    setErr(null);
+    setPhotoNote(null);
+    setPhotoBusy(true);
+    setPhotoProgress(0);
+    try {
+      const { ocrVoterRoll } = await import("@/lib/ocrVoterRoll");
+      const result = await ocrVoterRoll(file, (p) => setPhotoProgress(p));
+      if (result.rows.length === 0) {
+        setErr(
+          `Photo OCR did not find any voter rows in ${file.name}. Try a clearer, higher-contrast image.`,
+        );
+        return;
+      }
+      setRows((prev) => {
+        const base =
+          prev.length === 1 && !prev[0].name && !prev[0].msisdn && !prev[0].idNumber ? [] : prev;
+        return [
+          ...base,
+          ...result.rows.map((r) => ({ name: r.name, msisdn: r.phone, idNumber: r.id })),
+        ];
+      });
+      setPhotoNote(
+        `Recognised ${result.rows.length} row${result.rows.length === 1 ? "" : "s"} at ${(
+          result.confidence * 100
+        ).toFixed(0)}% confidence. Review before enrolling.`,
+      );
+    } catch (e) {
+      setErr(`Photo OCR failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setPhotoBusy(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
     }
   }
 
@@ -391,62 +447,82 @@ export function OnboardPage() {
             <div className="min-w-0 flex-1">
               <CardTitle className="text-base">Voter list</CardTitle>
               <CardDescription>
-                Keep a separate list for each community.
+                {activeList ? (
+                  <>
+                    Active: <b className="text-foreground">{activeList.name}</b> ·{" "}
+                    {activeList.memberCount} voter
+                    {activeList.memberCount === 1 ? "" : "s"}
+                  </>
+                ) : (
+                  "Keep a separate list for each community."
+                )}
               </CardDescription>
             </div>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                setNewListName("");
-                setShowNewList(true);
-              }}
+              onClick={() => setShowListManager((v) => !v)}
+              aria-expanded={showListManager}
             >
-              <FolderPlus className="size-4" />
-              New list
+              <ChevronDown
+                className={`size-4 transition-transform ${showListManager ? "rotate-180" : ""}`}
+              />
+              {showListManager ? "Hide lists" : "Manage lists"}
             </Button>
           </div>
         </CardHeader>
         <CardContent className="space-y-3">
-          {lists ? (
-            <div className="flex flex-wrap items-center gap-3">
-              <label
-                htmlFor="list-picker"
-                className="text-xs uppercase tracking-wider text-muted-foreground"
-              >
-                Active list
-              </label>
-              <select
-                id="list-picker"
-                value={activeId}
-                onChange={(e) => switchList(e.target.value)}
-                disabled={busy}
-                className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                {lists.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name} · {l.memberCount} voter{l.memberCount === 1 ? "" : "s"}
-                  </option>
-                ))}
-              </select>
-              {activeList && lists.length > 1 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="ml-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
-                  onClick={() => setConfirmDeleteList(activeList)}
+          {showListManager &&
+            (lists ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <label
+                  htmlFor="list-picker"
+                  className="text-xs uppercase tracking-wider text-muted-foreground"
                 >
-                  <Trash2 className="size-4" />
-                  Delete this list
+                  Active list
+                </label>
+                <select
+                  id="list-picker"
+                  value={activeId}
+                  onChange={(e) => switchList(e.target.value)}
+                  disabled={busy}
+                  className="rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  {lists.map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.name} · {l.memberCount} voter{l.memberCount === 1 ? "" : "s"}
+                    </option>
+                  ))}
+                </select>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setNewListName("");
+                    setShowNewList(true);
+                  }}
+                >
+                  <FolderPlus className="size-4" />
+                  New list
                 </Button>
-              )}
-            </div>
-          ) : (
-            <span className="text-sm text-muted-foreground">
-              <Loader2 className="mr-1 inline size-3.5 animate-spin" />
-              Loading lists…
-            </span>
-          )}
+                {activeList && lists.length > 1 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => setConfirmDeleteList(activeList)}
+                  >
+                    <Trash2 className="size-4" />
+                    Delete this list
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                <Loader2 className="mr-1 inline size-3.5 animate-spin" />
+                Loading lists…
+              </span>
+            ))}
 
           {/* Bridge status inline row */}
           <div className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-xs">
@@ -487,14 +563,16 @@ export function OnboardPage() {
           </CardDescription>
         </CardHeader>
 
-        <CardContent className="space-y-5">
-          {/* ---- Step 1: source ---- */}
+        <CardContent className="space-y-4">
+          {/* ---- Import toolbar ---- */}
           <section>
-            <SectionLabel step={1} title="Source" />
+            <div className="mb-2 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Import
+            </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+              <Button variant="secondary" size="sm" onClick={() => fileInputRef.current?.click()}>
                 <Upload className="size-4" />
-                Import spreadsheet
+                Spreadsheet
               </Button>
               <input
                 ref={fileInputRef}
@@ -504,15 +582,41 @@ export function OnboardPage() {
                 onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)}
               />
               <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={photoBusy}
+              >
+                {photoBusy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Camera className="size-4" />
+                )}
+                {photoBusy
+                  ? `Reading… ${Math.round(photoProgress * 100)}%`
+                  : "Photo"}
+              </Button>
+              <input
+                ref={photoInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => onPhotoPicked(e.target.files?.[0] ?? null)}
+              />
+              <Button
                 variant={showImport ? "secondary" : "outline"}
+                size="sm"
                 onClick={() => setShowImport((v) => !v)}
               >
                 {showImport ? "Hide paste box" : "Paste CSV"}
               </Button>
-              <span className="text-xs text-muted-foreground">
+              <span className="ml-auto text-xs text-muted-foreground">
                 Columns: <span className="font-medium">Name, Phone, ID</span>
               </span>
             </div>
+            {photoNote && (
+              <p className="mt-2 text-xs text-muted-foreground">{photoNote}</p>
+            )}
 
             {showImport && (
               <textarea
@@ -527,13 +631,14 @@ export function OnboardPage() {
             )}
           </section>
 
-          {/* ---- Step 2: review rows ---- */}
+          {/* ---- Review rows ---- */}
           <section>
-            <SectionLabel
-              step={2}
-              title="Review"
-              hint={`${draftCount} ready`}
-            />
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Voters to add
+              </span>
+              <span className="text-xs text-muted-foreground">{draftCount} ready</span>
+            </div>
             <div className="overflow-x-auto rounded-md border border-border/70">
               <table className="w-full text-sm">
                 <thead className="bg-muted/30 text-xs uppercase tracking-wider text-muted-foreground">
@@ -606,48 +711,36 @@ export function OnboardPage() {
             </div>
           </section>
 
-          {/* ---- Step 3: enrol ---- */}
-          <section className="border-t border-border/60 pt-4">
-            <SectionLabel step={3} title="Enrol" />
-
-            {/* Danger toggle: replace-mode. Off by default. */}
-            <label className="mb-4 flex cursor-pointer items-start gap-3 rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-sm">
+          {/* ---- Enrol action bar ---- */}
+          <section className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4">
+            <label className="flex cursor-pointer items-center gap-2 text-sm">
               <input
                 type="checkbox"
-                className="mt-0.5"
                 checked={mode === "replace"}
                 onChange={(e) => setMode(e.target.checked ? "replace" : "append")}
               />
-              <span className="flex-1">
-                <span
-                  className={
-                    mode === "replace"
-                      ? "font-semibold text-destructive"
-                      : "font-medium"
-                  }
-                >
-                  Replace the entire list
-                </span>
-                <span className="ml-1 text-xs text-muted-foreground">
-                  Wipes <b>{activeList?.name ?? "this list"}</b> before enrolling.
-                </span>
+              <span className={mode === "replace" ? "font-semibold text-destructive" : "font-medium"}>
+                Replace entire list
               </span>
+              {mode === "replace" && (
+                <span className="text-xs text-muted-foreground">
+                  wipes <b>{activeList?.name ?? "this list"}</b> first
+                </span>
+              )}
             </label>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                onClick={provision}
-                disabled={busy || !current || draftCount === 0}
-                size="lg"
-              >
-                {busy && <Loader2 className="size-4 animate-spin" />}
-                {busy
-                  ? "Enrolling…"
-                  : mode === "replace"
-                    ? `Replace list with ${draftCount} voter${draftCount === 1 ? "" : "s"}`
-                    : `Enrol ${draftCount} voter${draftCount === 1 ? "" : "s"}`}
-              </Button>
-            </div>
+            <Button
+              onClick={provision}
+              disabled={busy || !current || draftCount === 0}
+              size="lg"
+            >
+              {busy && <Loader2 className="size-4 animate-spin" />}
+              {busy
+                ? "Enrolling…"
+                : mode === "replace"
+                  ? `Replace with ${draftCount} voter${draftCount === 1 ? "" : "s"}`
+                  : `Enrol ${draftCount} voter${draftCount === 1 ? "" : "s"}`}
+            </Button>
           </section>
 
           {result && (
@@ -694,19 +787,37 @@ export function OnboardPage() {
                 )}
               </CardDescription>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              className="ml-auto"
-              onClick={refreshEnrolled}
-              disabled={loadingEnrolled}
-            >
-              <RefreshCw className={`size-4 ${loadingEnrolled ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            <div className="ml-auto flex items-center gap-2">
+              {showEnrolled && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={refreshEnrolled}
+                  disabled={loadingEnrolled}
+                >
+                  <RefreshCw className={`size-4 ${loadingEnrolled ? "animate-spin" : ""}`} />
+                  Refresh
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowEnrolled((v) => !v)}
+                aria-expanded={showEnrolled}
+              >
+                <Users className="size-4" />
+                {showEnrolled
+                  ? "Hide voters"
+                  : `View voters${enrolled ? ` (${enrolled.length})` : ""}`}
+                <ChevronDown
+                  className={`size-4 transition-transform ${showEnrolled ? "rotate-180" : ""}`}
+                />
+              </Button>
+            </div>
           </div>
         </CardHeader>
 
+        {showEnrolled && (
         <CardContent className="space-y-3">
           {enrolledErr && (
             <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -823,6 +934,7 @@ export function OnboardPage() {
             </div>
           )}
         </CardContent>
+        )}
       </Card>
 
       {result && (
@@ -931,28 +1043,4 @@ export function OnboardPage() {
   );
 }
 
-/**
- * A numbered section heading used inside the "Add voters" card so the
- * organiser sees an unambiguous 1 -> 2 -> 3 flow.
- */
-function SectionLabel({
-  step,
-  title,
-  hint,
-}: {
-  step: number;
-  title: string;
-  hint?: string;
-}) {
-  return (
-    <div className="mb-3 flex items-center gap-2">
-      <span className="inline-flex size-6 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
-        {step}
-      </span>
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-      {hint && (
-        <span className="ml-auto text-xs text-muted-foreground">{hint}</span>
-      )}
-    </div>
-  );
-}
+

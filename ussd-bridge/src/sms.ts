@@ -30,7 +30,11 @@ export interface SmsResult {
  */
 export async function sendSms(to: string, body: string): Promise<SmsResult> {
   const { username, apiKey, senderId, baseUrl } = config.at;
-  if (!username || !apiKey) {
+  // Dev OTP mode: when OTP_DEV_ECHO is on we deliberately skip the SMS
+  // provider entirely and just log the message. The /otp/request handler
+  // echoes the code back in its response, so local testing needs no
+  // Africa's Talking account (and no real SMS is ever sent).
+  if (config.otp.devEcho || !username || !apiKey) {
     // eslint-disable-next-line no-console
     console.log(`[sms:dev] to=${to} body=${body}`);
     return { ok: true, devMode: true, provider: "console" };

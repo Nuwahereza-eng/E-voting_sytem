@@ -37,6 +37,21 @@ import {
 } from "./lists.js";
 import { issueOtp, maskMsisdn, verifyOtp } from "./otp.js";
 import { sendSms } from "./sms.js";
+import {
+  SUPPORTED_LANGS,
+  isSupportedLang,
+  isConfigured as sunbirdConfigured,
+  translateBatch,
+  type LangCode,
+} from "./sunbird.js";
+import {
+  ensureTranslation,
+  getTranslation,
+  getAllForElection,
+} from "./translations.js";
+import { handleVoice, handleVoiceSimulate } from "./voice.js";
+import { analyzeElection } from "./anomalies.js";
+import { appendVote } from "./voteLog.js";
 
 // ---------------------------------------------------------------------------
 // Sauti USSD/SMS bridge
@@ -222,6 +237,26 @@ app.get("/health", (_req, res) => {
     members: members.length,
     root: computeRoot(members),
     activeList: { id: active.id, name: active.name },
+  });
+});
+
+// Friendly root so hitting the bare hostname doesn't return
+// "Cannot GET /". Returns a small self-describing JSON so a human
+// browsing the URL sees the service is up and knows where to go next.
+app.get("/", (_req, res) => {
+  const active = getActive();
+  res.json({
+    service: "sauti-bridge",
+    ok: true,
+    members: members.length,
+    activeList: { id: active.id, name: active.name },
+    docs: {
+      health: "/health",
+      members: "/members",
+      photos: "/photos/:hash",
+      otpRequest: "POST /otp/request",
+      otpVerify: "POST /otp/verify",
+    },
   });
 });
 
@@ -802,6 +837,14 @@ app.post("/vote", async (req: Request, res: Response) => {
     const proof = proofForIndex(members, voter.memberIndex);
     await submitVote(voter.secret, electionId, optionIndex, proof);
     lastVoteAt.set(msisdn, now);
+    appendVote({
+      electionId,
+      listId: getActive()?.id ?? null,
+      memberIndex: voter.memberIndex,
+      optionIndex,
+      timestamp: Date.now(),
+      channel: "phone",
+    });
     const after = await readElection(electionId).catch(() => election);
     return res.json({
       ok: true,
@@ -996,6 +1039,10 @@ app.get("/voter/:ref/elections", async (req: Request, res: Response) => {
     if (!communityIds.has(info.communityId)) continue;
     const owningHit = hits.find((h) => h.communityId === info.communityId);
     if (!owningHit) continue;
+    // Hide elections the voter can't act on: already closed, or past
+    // their deadline. The contract would reject a cast anyway, and a
+    // voter has no reason to see a dead ballot in the pick list.
+    if (info.closed || now >= info.closesAt) continue;
     // Filter out elections this voter has already cast in — the
     // contract's has_voted check would reject a second attempt anyway,
     // but hiding it up front keeps the wizard clean.
@@ -1105,6 +1152,14 @@ app.post("/vote/by-ref", async (req: Request, res: Response) => {
   try {
     const proof = proofForIndex(owning.members, owning.memberIndex);
     await submitVote(owning.secret, electionId, optionIndex, proof);
+    appendVote({
+      electionId,
+      listId: owning.listId,
+      memberIndex: owning.memberIndex,
+      optionIndex,
+      timestamp: Date.now(),
+      channel: "web",
+    });
     const after = await readElection(electionId).catch(() => election);
     return res.json({
       ok: true,
@@ -1120,6 +1175,178 @@ app.post("/vote/by-ref", async (req: Request, res: Response) => {
     return res.status(400).json({
       error: e instanceof Error ? e.message : String(e),
     });
+  }
+});
+
+// -------------------- Multilingual ballot translation --------------------
+// AI feature: Sunbird-backed translation of the ballot question + option
+// labels into supported Ugandan/East African languages. Cached per
+// election so we translate once and serve fast. The dev stub in
+// sunbird.ts keeps this endpoint functional even without credentials.
+
+app.get("/languages", (_req, res) => {
+  res.json({
+    languages: SUPPORTED_LANGS,
+    sunbirdConfigured: sunbirdConfigured(),
+  });
+});
+
+// Generic UI-string translation. The web app calls this to translate
+// arbitrary interface text (buttons, headings, labels) on the fly so the
+// whole UI follows the ballot-language picker. Results are cached per
+// (target, text) so repeated strings across pages are translated once.
+const uiTextCache = new Map<string, string>();
+app.post("/translate/text", async (req: Request, res: Response) => {
+  const target = String(req.body?.target ?? "");
+  const rawTexts = req.body?.texts;
+  if (!isSupportedLang(target)) {
+    return res.status(400).json({ error: `unsupported language: ${target}` });
+  }
+  if (!Array.isArray(rawTexts)) {
+    return res.status(400).json({ error: "texts must be an array of strings" });
+  }
+  const texts = rawTexts.map((s) => String(s));
+  // English is the source — nothing to do.
+  if (target === "eng") {
+    return res.json({ target, translations: texts });
+  }
+  try {
+    const out: string[] = new Array(texts.length);
+    const misses: { index: number; text: string }[] = [];
+    for (let i = 0; i < texts.length; i++) {
+      const key = `${target}\u0000${texts[i]}`;
+      const hit = uiTextCache.get(key);
+      if (hit != null) {
+        out[i] = hit;
+      } else {
+        out[i] = texts[i];
+        misses.push({ index: i, text: texts[i] });
+      }
+    }
+    if (misses.length > 0) {
+      const translated = await translateBatch(
+        misses.map((m) => m.text),
+        target as LangCode,
+        "eng",
+      );
+      misses.forEach((m, k) => {
+        const val = translated[k] ?? m.text;
+        out[m.index] = val;
+        uiTextCache.set(`${target}\u0000${m.text}`, val);
+      });
+    }
+    return res.json({ target, translations: out });
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+});
+
+app.post("/translate/ballot", async (req: Request, res: Response) => {
+  const electionId = Number(req.body?.electionId);
+  const target = String(req.body?.target ?? "");
+  if (!Number.isInteger(electionId) || electionId < 0) {
+    return res
+      .status(400)
+      .json({ error: "electionId must be a non-negative integer" });
+  }
+  if (!isSupportedLang(target)) {
+    return res.status(400).json({ error: `unsupported language: ${target}` });
+  }
+  // Prefer a client-supplied source (already-decoded labels), fall back
+  // to the on-chain election. Some option strings are JSON-encoded
+  // metadata blobs (label + symbol + photo) which the frontend has
+  // already parsed, so translating those raw strings would produce
+  // garbage — always trust the frontend when it passes source.
+  let source: { question: string; options: string[] } | null = null;
+  const bodySource = req.body?.source;
+  if (
+    bodySource &&
+    typeof bodySource.question === "string" &&
+    Array.isArray(bodySource.options)
+  ) {
+    source = {
+      question: bodySource.question,
+      options: (bodySource.options as unknown[]).map((s) => String(s)),
+    };
+  } else {
+    try {
+      const info = await readElection(electionId);
+      source = { question: info.question, options: info.options };
+    } catch {
+      return res
+        .status(404)
+        .json({ error: `Election #${electionId} not found.` });
+    }
+  }
+  try {
+    const entry = await ensureTranslation(
+      String(electionId),
+      target as LangCode,
+      source,
+    );
+    return res.json({
+      electionId,
+      lang: target,
+      translation: entry,
+      sunbirdConfigured: sunbirdConfigured(),
+    });
+  } catch (e) {
+    return res.status(500).json({
+      error: e instanceof Error ? e.message : String(e),
+    });
+  }
+});
+
+app.get(
+  "/translations/:electionId",
+  (req: Request, res: Response) => {
+    const electionId = Number(req.params.electionId);
+    if (!Number.isInteger(electionId) || electionId < 0) {
+      return res.status(400).json({ error: "invalid electionId" });
+    }
+    const lang = String(req.query.lang ?? "");
+    if (lang) {
+      const entry = getTranslation(String(electionId), lang);
+      if (!entry) return res.status(404).json({ error: "not translated yet" });
+      return res.json({ electionId, lang, translation: entry });
+    }
+    return res.json({
+      electionId,
+      translations: getAllForElection(String(electionId)),
+    });
+  },
+);
+
+// -------------------- Voice IVR (AT Voice + Sunbird STT) --------------------
+// AI feature: inbound voice calls become votes. handleVoice returns AT
+// Voice XML dial plans; handleVoiceSimulate is a dev endpoint that takes
+// a text transcript and exercises the matcher + submission path.
+
+app.post("/voice/answer", (req: Request, res: Response) => {
+  void handleVoice(req, res);
+});
+app.post("/voice/simulate", (req: Request, res: Response) => {
+  void handleVoiceSimulate(req, res);
+});
+
+// -------------------- Anomaly detection --------------------
+// AI feature: statistical audit notes over the bridge's local vote log.
+// See ussd-bridge/src/anomalies.ts for the heuristics.
+
+app.get("/anomalies/:electionId", async (req: Request, res: Response) => {
+  const electionId = Number(req.params.electionId);
+  if (!Number.isInteger(electionId) || electionId < 0) {
+    return res.status(400).json({ error: "invalid electionId" });
+  }
+  try {
+    const report = await analyzeElection(electionId);
+    return res.json(report);
+  } catch (e) {
+    return res
+      .status(500)
+      .json({ error: e instanceof Error ? e.message : String(e) });
   }
 });
 
