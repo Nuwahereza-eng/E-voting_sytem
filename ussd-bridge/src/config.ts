@@ -56,4 +56,10 @@ export const config = {
   },
   // Translations cache directory (per-election ballot translations).
   translationsPath: process.env.TRANSLATIONS_PATH ?? "./data/translations.json",
+  // UI string translations cache (whole-interface auto-translation). Keyed by
+  // (target-lang, source-text) and persisted so each phrase is only fetched
+  // from Sunbird once, ever — turning the per-minute rate limit into a
+  // one-time warm-up cost instead of a per-restart cost.
+  uiTranslationsPath:
+    process.env.UI_TRANSLATIONS_PATH ?? "./data/ui-translations.json",
 };

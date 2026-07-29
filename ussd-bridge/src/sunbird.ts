@@ -106,49 +106,92 @@ export async function translate(input: TranslateInput): Promise<string> {
   }
 
   const token = await getToken();
-  const res = await fetch(`${BASE}/tasks/translate`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      target_language: target,
-      ...(source ? { source_language: source } : {}),
-      text,
-    }),
-  });
-  if (!res.ok) {
-    const t = await res.text().catch(() => "");
-    throw new Error(`sunbird translate ${res.status}: ${t.slice(0, 200)}`);
+
+  // Sunbird enforces a per-minute request quota. Under a burst (e.g. the web
+  // app translating a whole page on a language switch) we can momentarily hit
+  // it and get a 429. Retry a few times with backoff so transient limit hits
+  // near the boundary self-heal instead of failing the whole batch.
+  const MAX_ATTEMPTS = 4;
+  const BACKOFF_MS = [1500, 3000, 6000];
+  let lastErr = "";
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const res = await fetch(`${BASE}/tasks/translate`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        target_language: target,
+        ...(source ? { source_language: source } : {}),
+        text,
+      }),
+    });
+    if (res.status === 429 && attempt < MAX_ATTEMPTS - 1) {
+      lastErr = `sunbird translate 429 (attempt ${attempt + 1})`;
+      await new Promise((r) => setTimeout(r, BACKOFF_MS[attempt]));
+      continue;
+    }
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(`sunbird translate ${res.status}: ${t.slice(0, 200)}`);
+    }
+    const j = (await res.json()) as {
+      output?: { translated_text?: string };
+      translated_text?: string;
+      text?: string;
+    };
+    // Response shape has shifted between API versions; try known keys.
+    return (
+      j.output?.translated_text ??
+      j.translated_text ??
+      j.text ??
+      text
+    );
   }
-  const j = (await res.json()) as {
-    output?: { translated_text?: string };
-    translated_text?: string;
-    text?: string;
-  };
-  // Response shape has shifted between API versions; try known keys.
-  return (
-    j.output?.translated_text ??
-    j.translated_text ??
-    j.text ??
-    text
-  );
+  throw new Error(lastErr || "sunbird translate: exhausted retries");
 }
 
 /**
- * Translate an array of strings. Sequential to keep it simple and avoid
- * hitting rate limits — ballots are small (question + a handful of options).
+ * Translate an array of strings. Runs with a bounded concurrency pool so a
+ * whole-page UI batch (dozens of strings) finishes in a few seconds instead
+ * of tens of seconds, while still capping parallel calls so we don't trip
+ * Sunbird's rate limiter. Identical strings within a batch are de-duplicated
+ * so each unique phrase is only sent once. Order is preserved.
  */
+const BATCH_CONCURRENCY = 6;
+
 export async function translateBatch(
   items: string[],
   target: LangCode,
   source?: LangCode,
 ): Promise<string[]> {
-  const out: string[] = [];
-  for (const t of items) {
-    out.push(await translate({ text: t, target, source }));
+  const out: string[] = new Array(items.length);
+
+  // De-dupe: map each unique string to the indices that need it.
+  const uniques = new Map<string, number[]>();
+  items.forEach((t, i) => {
+    const list = uniques.get(t);
+    if (list) list.push(i);
+    else uniques.set(t, [i]);
+  });
+
+  const jobs = Array.from(uniques.keys());
+  let cursor = 0;
+
+  async function worker(): Promise<void> {
+    while (cursor < jobs.length) {
+      const text = jobs[cursor++];
+      const value = await translate({ text, target, source });
+      for (const idx of uniques.get(text) as number[]) out[idx] = value;
+    }
   }
+
+  const workers = Array.from(
+    { length: Math.min(BATCH_CONCURRENCY, jobs.length) },
+    () => worker(),
+  );
+  await Promise.all(workers);
   return out;
 }
 

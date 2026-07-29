@@ -70,6 +70,14 @@ export function AutoTranslate() {
   const pendingRef = useRef(new Set<string>());
   const flushTimer = useRef<number | null>(null);
   const applyTimer = useRef<number | null>(null);
+  // True while a translate request is in flight. Prevents overlapping batches
+  // (live DOM mutations like countdowns keep re-triggering apply()); without
+  // this, several whole-page batches pile up on the bridge at once and trip
+  // its rate limiter, which used to surface as 500s and stuck-English text.
+  const flushing = useRef(false);
+  // Consecutive failed flushes. Bounds retries so a genuinely unreachable
+  // bridge falls back to English instead of looping forever.
+  const failCount = useRef(0);
   const langRef = useRef(lang);
   langRef.current = lang;
 
@@ -136,24 +144,42 @@ export function AutoTranslate() {
       if (flushTimer.current != null) return;
       flushTimer.current = window.setTimeout(() => {
         flushTimer.current = null;
+        // A batch is already in flight — leave the pending queue intact and
+        // try again shortly. The in-flight request will call apply() when it
+        // resolves, which re-arms this if anything is still outstanding.
+        if (flushing.current) {
+          scheduleFlush();
+          return;
+        }
         const target = langRef.current;
         const texts = Array.from(pendingRef.current);
         pendingRef.current.clear();
         if (target === "eng" || texts.length === 0) return;
+        flushing.current = true;
         translateTexts(target, texts)
           .then(({ translations }) => {
+            failCount.current = 0;
             texts.forEach((t, i) =>
               cacheRef.current.set(`${target}\u0000${t}`, translations[i] ?? t),
             );
           })
           .catch(() => {
-            // Cache identity on failure so we stay English and don't loop.
-            texts.forEach((t) => {
-              const k = `${target}\u0000${t}`;
-              if (!cacheRef.current.has(k)) cacheRef.current.set(k, t);
-            });
+            failCount.current += 1;
+            if (failCount.current <= 3) {
+              // Transient failure (bridge slow / rate limited): re-queue so
+              // the next pass retries instead of poisoning the cache.
+              texts.forEach((t) => pendingRef.current.add(t));
+            } else {
+              // Bridge looks genuinely unreachable — stop looping and stay
+              // English by caching identity for these strings.
+              texts.forEach((t) => {
+                const k = `${target}\u0000${t}`;
+                if (!cacheRef.current.has(k)) cacheRef.current.set(k, t);
+              });
+            }
           })
           .finally(() => {
+            flushing.current = false;
             // The first requested batch is now applied — the switch is
             // done as far as the user is concerned. Clear the loading
             // veil even if background mutations keep the queue busy, so

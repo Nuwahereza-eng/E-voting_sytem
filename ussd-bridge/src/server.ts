@@ -1195,7 +1195,40 @@ app.get("/languages", (_req, res) => {
 // arbitrary interface text (buttons, headings, labels) on the fly so the
 // whole UI follows the ballot-language picker. Results are cached per
 // (target, text) so repeated strings across pages are translated once.
+//
+// The cache is persisted to disk (config.uiTranslationsPath): every unique
+// phrase is fetched from Sunbird at most once, ever, so the per-minute rate
+// limit is a one-time warm-up rather than a per-restart cost.
 const uiTextCache = new Map<string, string>();
+
+(function loadUiTextCache() {
+  const p = config.uiTranslationsPath;
+  if (!fs.existsSync(p)) return;
+  try {
+    const obj = JSON.parse(fs.readFileSync(p, "utf8")) as Record<string, string>;
+    for (const [k, v] of Object.entries(obj)) uiTextCache.set(k, v);
+  } catch {
+    // Corrupt cache file — ignore and start fresh.
+  }
+})();
+
+let uiCacheSaveTimer: NodeJS.Timeout | null = null;
+function persistUiTextCache() {
+  if (uiCacheSaveTimer) return;
+  uiCacheSaveTimer = setTimeout(() => {
+    uiCacheSaveTimer = null;
+    try {
+      const p = config.uiTranslationsPath;
+      fs.mkdirSync(path.dirname(p), { recursive: true });
+      const obj: Record<string, string> = {};
+      for (const [k, v] of uiTextCache) obj[k] = v;
+      fs.writeFileSync(p, JSON.stringify(obj, null, 2));
+    } catch {
+      // Best-effort cache; a failed write just means we re-fetch later.
+    }
+  }, 500);
+}
+
 app.post("/translate/text", async (req: Request, res: Response) => {
   const target = String(req.body?.target ?? "");
   const rawTexts = req.body?.texts;
@@ -1234,6 +1267,7 @@ app.post("/translate/text", async (req: Request, res: Response) => {
         out[m.index] = val;
         uiTextCache.set(`${target}\u0000${m.text}`, val);
       });
+      persistUiTextCache();
     }
     return res.json({ target, translations: out });
   } catch (e) {
