@@ -173,6 +173,17 @@ export function createList(name: string): VoterList {
   return rec;
 }
 
+/** Read a specific list's members straight from disk WITHOUT changing
+ *  the active list. Used by the sync flow so it can hash the roll that
+ *  actually belongs to a community, regardless of which list is active. */
+export function membersForList(id: string): string[] {
+  const i = getIndex();
+  const target = i.lists.find((l) => l.id === id);
+  if (!target) throw new Error(`Unknown list: ${id}`);
+  const { membersPath } = pathsForList(id);
+  return loadMembersFile(membersPath);
+}
+
 /** Switch the active list and reload its registry + members. Returns
  *  the new members[] so callers can update their in-memory copy. */
 export function activateList(id: string): { list: VoterList; members: string[] } {

@@ -279,3 +279,76 @@
     opacity: 0;
   }
 }
+
+/* ---- Lightweight, dependency-free entrance + ambient motion ---- */
+@keyframes sauti-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes sauti-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+@keyframes sauti-sheen {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@layer utilities {
+  /* Fade-and-rise on mount. Pair with .reveal-delay-N for a stagger. */
+  .reveal {
+    opacity: 0;
+    animation: sauti-fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+  .reveal-delay-1 {
+    animation-delay: 0.08s;
+  }
+  .reveal-delay-2 {
+    animation-delay: 0.16s;
+  }
+  .reveal-delay-3 {
+    animation-delay: 0.24s;
+  }
+  .reveal-delay-4 {
+    animation-delay: 0.32s;
+  }
+
+  /* Gentle idle bob for hero icons/medallions. */
+  .float-slow {
+    animation: sauti-float 4.5s ease-in-out infinite;
+  }
+
+  /* Animated gradient text used for the hero accent phrase. */
+  .text-sheen {
+    background-size: 200% auto;
+    animation: sauti-sheen 6s linear infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .float-slow,
+  .text-sheen,
+  .pulse-dot::before {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+}
+

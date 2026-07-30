@@ -20,6 +20,7 @@ export interface BridgeMembers {
   members: string[];
   root: string;
   count: number;
+  activeList?: { id: string; name: string };
 }
 
 export interface BridgeStatus {
@@ -119,6 +120,7 @@ export interface VoterList {
   createdAt: number;
   memberCount: number;
   active: boolean;
+  communityId?: number | null;
 }
 
 export async function fetchLists(): Promise<{ activeId: string; lists: VoterList[] }> {
@@ -243,6 +245,19 @@ export async function getListCommunity(listId: string): Promise<{
   communityId: number | null;
 }> {
   const r = await fetch(url(`/lists/${encodeURIComponent(listId)}/community`));
+  return json(r);
+}
+
+/** Read a specific list's members + Merkle root WITHOUT changing the
+ *  active list. Used by the community-sync flow so it always hashes the
+ *  roll bound to that community, not whatever list happens to be active. */
+export async function fetchListMembers(listId: string): Promise<{
+  listId: string;
+  members: string[];
+  root: string;
+  count: number;
+}> {
+  const r = await fetch(url(`/lists/${encodeURIComponent(listId)}/members`));
   return json(r);
 }
 

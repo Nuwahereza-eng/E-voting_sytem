@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
@@ -10,6 +10,11 @@ import {
   ShieldCheck,
   Vote as VoteIcon,
 } from "lucide-react";
+import {
+  GoogleCloudLogo,
+  StellarLogo,
+  SunbirdLogo,
+} from "@/components/BrandLogos";
 import {
   Card,
   CardContent,
@@ -39,7 +44,7 @@ export function HomePage() {
         </Badge>
         <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
           Community decisions{" "}
-          <span className="bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+          <span className="text-sheen bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
             no one can quietly rewrite.
           </span>
         </h1>
@@ -52,6 +57,7 @@ export function HomePage() {
       <section className="grid grid-cols-1 gap-5 md:grid-cols-2">
         <LaneCard
           to="/participate"
+          reveal="reveal reveal-delay-1"
           icon={<VoteIcon className="size-7" />}
           title="Participate in an election"
           description="Cast a ballot, check if you're on the voter roll, or verify a public result."
@@ -65,6 +71,7 @@ export function HomePage() {
         />
         <LaneCard
           to="/organise"
+          reveal="reveal reveal-delay-2"
           icon={<Landmark className="size-7" />}
           title="Organise an election"
           description="Enrol voters, register a community, and run a ballot. Small fee + refundable bond."
@@ -80,19 +87,25 @@ export function HomePage() {
 
       <section className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <TrustBadge
+          index={1}
           icon={<EyeOff className="size-4" />}
           title="No central authority"
           body="Votes are recorded on Stellar. There's no server whose owner can edit the tally."
+          accent="text-primary bg-primary/15 ring-primary/30"
         />
         <TrustBadge
+          index={2}
           icon={<ShieldCheck className="size-4" />}
           title="Tamper-evident tally"
           body="Every ballot is a signed Soroban transaction. Any change would break the chain."
+          accent="text-accent bg-accent/15 ring-accent/30"
         />
         <TrustBadge
+          index={3}
           icon={<ScanLine className="size-4" />}
           title="Open verification"
           body="Anyone can pull the numbers directly from the contract — no login, no trust in us."
+          accent="text-emerald-400 bg-emerald-500/15 ring-emerald-500/30"
         />
       </section>
 
@@ -116,6 +129,8 @@ export function HomePage() {
         </CardContent>
       </Card>
 
+      <PoweredBy />
+
       <TransparencyCard />
     </>
   );
@@ -137,23 +152,121 @@ function HowStep({ n, title, body }: { n: number; title: string; body: string })
 
 // A small trust-signal card used in the row under the two lanes.
 function TrustBadge({
+  index,
   icon,
   title,
   body,
+  accent,
 }: {
+  index: number;
   icon: React.ReactNode;
   title: string;
   body: string;
+  accent: string;
 }) {
+  // Literal delay classes so Tailwind's scanner keeps them.
+  const delay =
+    index === 1
+      ? "reveal-delay-1"
+      : index === 2
+        ? "reveal-delay-2"
+        : "reveal-delay-3";
   return (
-    <Card className="h-full">
+    <Card
+      className={`reveal ${delay} group h-full transition duration-300 hover:-translate-y-0.5 hover:border-border`}
+    >
       <CardHeader className="p-4">
-        <div className="mb-2 inline-flex size-8 items-center justify-center rounded-lg bg-primary/15 text-primary ring-1 ring-primary/30">
+        <div
+          className={`mb-2 inline-flex size-8 items-center justify-center rounded-lg ring-1 transition group-hover:scale-110 ${accent}`}
+        >
           {icon}
         </div>
         <CardTitle className="text-sm font-semibold">{title}</CardTitle>
         <CardDescription className="text-xs leading-relaxed">
           {body}
+        </CardDescription>
+      </CardHeader>
+    </Card>
+  );
+}
+
+// The stack of platforms doing the heavy lifting. Icon-forward and
+// terse — judges scan it in a glance rather than reading paragraphs.
+function PoweredBy() {
+  return (
+    <section className="mt-10">
+      <h2 className="reveal mb-4 text-center text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+        Powered by
+      </h2>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <TechCard
+          index={1}
+          logo={<StellarLogo className="size-7 text-foreground" />}
+          name="Stellar"
+          role="Smart contracts"
+          tagline="Tamper-evident ballots on-chain"
+          glow="group-hover:shadow-[0_18px_40px_-18px_hsl(var(--primary)/0.6)]"
+        />
+        <TechCard
+          index={2}
+          logo={<SunbirdLogo className="size-8" />}
+          name="Sunbird AI"
+          role="Translation"
+          tagline="6 local languages, in real time"
+          glow="group-hover:shadow-[0_18px_40px_-18px_hsl(var(--accent)/0.6)]"
+        />
+        <TechCard
+          index={3}
+          logo={<GoogleCloudLogo className="size-7" />}
+          name="Google Cloud Vision"
+          role="Text extraction"
+          tagline="Photo of a roll → digital list"
+          glow="group-hover:shadow-[0_18px_40px_-18px_rgb(66_133_244/0.5)]"
+        />
+      </div>
+    </section>
+  );
+}
+
+// A single platform card in the "Powered by" strip.
+function TechCard({
+  index,
+  logo,
+  name,
+  role,
+  tagline,
+  glow,
+}: {
+  index: number;
+  logo: React.ReactNode;
+  name: string;
+  role: string;
+  tagline: string;
+  glow: string;
+}) {
+  // Literal class names so Tailwind's content scanner keeps them.
+  const delay =
+    index === 1
+      ? "reveal-delay-1"
+      : index === 2
+        ? "reveal-delay-2"
+        : "reveal-delay-3";
+  return (
+    <Card
+      className={`reveal ${delay} group h-full text-center transition duration-300 hover:-translate-y-1 hover:border-border ${glow}`}
+    >
+      <CardHeader className="items-center p-5">
+        <div className="float-slow mb-3 inline-flex size-12 items-center justify-center rounded-xl bg-background/70 ring-1 ring-border transition group-hover:scale-110 group-hover:ring-border">
+          {logo}
+        </div>
+        <CardTitle className="text-sm font-semibold text-foreground">
+          {name}
+        </CardTitle>
+        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+          {role}
+        </span>
+        <CardDescription className="mt-1 text-xs leading-relaxed">
+          {tagline}
         </CardDescription>
       </CardHeader>
     </Card>
@@ -232,17 +345,11 @@ function LiveStats() {
         <span aria-live="polite">Live on Stellar testnet</span>
       </div>
       <div className="grid grid-cols-3 gap-3">
-        <StatTile
-          label="Communities"
-          value={stats.communities.toLocaleString()}
-        />
-        <StatTile
-          label="Elections"
-          value={stats.elections.toLocaleString()}
-        />
+        <StatTile label="Communities" value={stats.communities} />
+        <StatTile label="Elections" value={stats.elections} />
         <StatTile
           label="Votes cast"
-          value={stats.votes.toLocaleString()}
+          value={stats.votes}
           icon={<Activity className="size-3.5" />}
         />
       </div>
@@ -256,22 +363,63 @@ function StatTile({
   icon,
 }: {
   label: string;
-  value: string;
+  value: number;
   icon?: React.ReactNode;
 }) {
+  const display = useCountUp(value);
   return (
-    <Card>
+    <Card className="group transition duration-300 hover:-translate-y-0.5 hover:border-border">
       <CardContent className="flex flex-col items-center justify-center gap-1 py-5 text-center">
         <div className="flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
           {icon}
           {label}
         </div>
         <div className="text-3xl font-bold tabular-nums text-foreground">
-          {value}
+          {display.toLocaleString()}
         </div>
       </CardContent>
     </Card>
   );
+}
+
+// Animate a number from its previous value up (or down) to the target
+// over a short duration using requestAnimationFrame. Respects the
+// user's reduced-motion preference by snapping straight to the value.
+function useCountUp(target: number, durationMs = 900): number {
+  const [display, setDisplay] = useState(0);
+  const fromRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const prefersReduced =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    const from = fromRef.current;
+    const to = target;
+    if (prefersReduced || from === to) {
+      setDisplay(to);
+      fromRef.current = to;
+      return;
+    }
+    const start = performance.now();
+    // easeOutCubic for a lively-then-settling count.
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3);
+    const tick = (now: number) => {
+      const p = Math.min(1, (now - start) / durationMs);
+      setDisplay(Math.round(from + (to - from) * ease(p)));
+      if (p < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        fromRef.current = to;
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    };
+  }, [target, durationMs]);
+
+  return display;
 }
 
 // Public transparency block — click-to-copy contract ID and a link to
@@ -351,6 +499,7 @@ function TransparencyCard() {
 // coloured glow, larger icon and CTA.
 function LaneCard({
   to,
+  reveal,
   icon,
   title,
   description,
@@ -363,6 +512,7 @@ function LaneCard({
   ctaColor,
 }: {
   to: string;
+  reveal: string;
   icon: React.ReactNode;
   title: string;
   description: string;
@@ -377,7 +527,7 @@ function LaneCard({
   return (
     <Link
       to={to}
-      className="group block h-full no-underline focus-visible:outline-none"
+      className={`group block h-full no-underline focus-visible:outline-none ${reveal}`}
     >
       <Card
         className={

@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { buildTree, toHex } from "../merkle";
-import { readCommunity, registerCommunity, updateMembers } from "../soroban";
-import { bindListCommunity, fetchLists, fetchMembers } from "../bridge";
+import type { CommunityInfo } from "../soroban";
+import {
+  readCommunity,
+  readNextCommunityId,
+  registerCommunity,
+  updateMembers,
+} from "../soroban";
+import { bindListCommunity, fetchLists, fetchListMembers, fetchMembers } from "../bridge";
 import { useWallet } from "../wallet";
 import { config } from "../config";
 import { PageHeader } from "@/components/PageHeader";
@@ -212,10 +218,39 @@ function SyncCommunityCard({
     bridgeRoot: string;
     bridgeCount: number;
     match: boolean;
+    listId: string;
+    listName: string;
   }>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  // The organiser's own communities, so they can look up the ID to
+  // sync without having to remember the number.
+  const [mine, setMine] = useState<CommunityInfo[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const next = await readNextCommunityId();
+        const ids = Array.from({ length: next }, (_, i) => i);
+        const infos = await Promise.all(
+          ids.map((id) => readCommunity(id).catch(() => null)),
+        );
+        if (cancelled) return;
+        setMine(
+          infos.filter(
+            (c): c is CommunityInfo => c !== null && c.admin === admin,
+          ),
+        );
+      } catch {
+        if (!cancelled) setMine([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [admin]);
 
   async function doCheck() {
     setChecking(true);
@@ -225,15 +260,39 @@ function SyncCommunityCard({
     try {
       const id = Number(cid);
       if (!Number.isInteger(id) || id < 0) throw new Error("Enter a valid community ID");
-      const [b, c] = await Promise.all([fetchMembers(), readCommunity(id)]);
-      if (b.count === 0) throw new Error("The bridge has no voters in the active list.");
-      const bridgeRoot = toHex((await buildTree(b.members)).root);
+      // Find the voter list BOUND to this community — never blindly hash
+      // whatever list happens to be active, or we'd push the wrong roll
+      // on-chain. Fall back to the active list only if no list is bound
+      // (legacy single-list setups), and warn about it.
+      const [c, listsResp] = await Promise.all([readCommunity(id), fetchLists()]);
+      const bound = listsResp.lists.find((l) => l.communityId === id);
+      let listId: string;
+      let listName: string;
+      let members: string[];
+      if (bound) {
+        listId = bound.id;
+        listName = bound.name;
+        const lm = await fetchListMembers(bound.id);
+        members = lm.members;
+      } else {
+        // No binding — use the active list but make it obvious.
+        const b = await fetchMembers();
+        listId = b.activeList?.id ?? "active";
+        listName = `${b.activeList?.name ?? "active list"} (not bound to #${id})`;
+        members = b.members;
+      }
+      if (members.length === 0) {
+        throw new Error(`The voter list "${listName}" has no members.`);
+      }
+      const bridgeRoot = toHex((await buildTree(members)).root);
       setCheck({
         onChainRoot: c.merkleRoot,
         onChainCount: c.memberCount,
         bridgeRoot,
-        bridgeCount: b.count,
+        bridgeCount: members.length,
         match: bridgeRoot.toLowerCase() === c.merkleRoot.toLowerCase(),
+        listId,
+        listName,
       });
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
@@ -268,6 +327,36 @@ function SyncCommunityCard({
         Use this after enrolling or removing voters. It pushes the current voter list's Merkle
         root back on-chain so proofs verify. Only the community admin can call this.
       </p>
+      {mine !== null && (
+        <div style={{ marginBottom: 12 }}>
+          {mine.length === 0 ? (
+            <p className="muted small">
+              This wallet doesn't admin any registered communities yet.
+            </p>
+          ) : (
+            <>
+              <label>Your communities</label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {mine.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="secondary"
+                    onClick={() => {
+                      setCid(String(c.id));
+                      setCheck(null);
+                      setMsg(null);
+                    }}
+                    title={`${c.memberCount} members on-chain`}
+                  >
+                    #{c.id} · {c.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
       <div style={{ display: "flex", gap: 8, alignItems: "end", flexWrap: "wrap" }}>
         <div>
           <label>Community ID</label>
@@ -291,11 +380,15 @@ function SyncCommunityCard({
         <div style={{ marginTop: 12 }}>
           <div className={check.match ? "ok-box" : "warn-box"}>
             {check.match ? (
-              <>Community #{cid} is already in sync ({check.bridgeCount} voters).</>
+              <>
+                Community #{cid} is already in sync with list &ldquo;{check.listName}&rdquo; (
+                {check.bridgeCount} voters).
+              </>
             ) : (
               <>
-                Out of sync. On-chain has {check.onChainCount} voters, bridge active list has{" "}
-                {check.bridgeCount}. Click <b>Sync now</b> to update.
+                Out of sync. On-chain has {check.onChainCount} voters; list &ldquo;
+                {check.listName}&rdquo; has {check.bridgeCount}. Click <b>Sync now</b> to push list
+                &ldquo;{check.listName}&rdquo; on-chain.
               </>
             )}
           </div>

@@ -34,6 +34,7 @@ import {
   setListCommunity,
   findVoterAcrossLists,
   findVoterByPhoneAcrossLists,
+  membersForList,
 } from "./lists.js";
 import { issueOtp, maskMsisdn, verifyOtp } from "./otp.js";
 import { sendSms } from "./sms.js";
@@ -706,6 +707,24 @@ app.delete("/lists/:id", (req: Request, res: Response) => {
 app.get("/lists/:id/community", (req: Request, res: Response) => {
   const id = String(req.params.id);
   res.json({ listId: id, communityId: getListCommunity(id) });
+});
+
+// GET /lists/:id/members -> { listId, members, root, count }
+// Reads a specific list's roll without changing the active list, so the
+// web sync flow can hash the roll that actually belongs to a community.
+app.get("/lists/:id/members", (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  try {
+    const list = membersForList(id);
+    res.json({
+      listId: id,
+      members: list,
+      root: computeRoot(list),
+      count: list.length,
+    });
+  } catch (e) {
+    res.status(404).json({ error: e instanceof Error ? e.message : String(e) });
+  }
 });
 
 app.post("/lists/:id/community", (req: Request, res: Response) => {

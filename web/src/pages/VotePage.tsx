@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circle, UserCheck, Languages, Trophy } from "lucide-react";
+import { Loader2, IdCard, Wallet, ShieldCheck, RotateCw, ArrowRight, Check, Circle, UserCheck, Languages, Trophy, Vote, Users, Clock } from "lucide-react";
 import { proofForMember } from "../merkle";
 import { readElection, readNextElectionId, submitVote, type ElectionInfo } from "../soroban";
 import {
@@ -641,7 +641,8 @@ function IdVote({
             {elections.map((e) => {
               const meta = decodeElectionQuestion(e.question);
               const displayTitle = meta.title || e.question;
-              const resultsVisible = e.closed || Date.now() / 1000 >= e.closesAt;
+              const closed = e.closed || Date.now() / 1000 >= e.closesAt;
+              const resultsVisible = closed;
               return (
                 <button
                   key={e.electionId}
@@ -651,24 +652,65 @@ function IdVote({
                     setChosenOption(null);
                     setStep("option");
                   }}
-                  className="w-full rounded-md border border-border/70 p-3 text-left transition hover:border-primary/60 hover:bg-primary/5"
+                  className="group flex w-full items-center gap-3 rounded-xl border border-border/70 bg-card/40 p-4 text-left transition hover:border-primary/60 hover:bg-primary/5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium">{meta.name || displayTitle}</span>
-                    <Badge variant="outline">#{e.electionId}</Badge>
-                    <Badge variant="secondary">{e.listName}</Badge>
-                    <span className="ml-auto text-xs text-muted-foreground">
-                      closes {new Date(e.closesAt * 1000).toLocaleString()}
-                    </span>
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20 transition group-hover:bg-primary/15">
+                    <Vote className="size-5" />
                   </div>
-                  {meta.name && (
-                    <div className="mt-1 text-sm text-foreground/80">{displayTitle}</div>
-                  )}
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {e.options.length} candidate{e.options.length === 1 ? "" : "s"}
-                    {resultsVisible
-                      ? ` \u00b7 ${e.totalVotes} vote${e.totalVotes === 1 ? "" : "s"}`
-                      : " \u00b7 results appear after close"}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="truncate text-sm font-semibold text-foreground">
+                        {meta.name || displayTitle}
+                      </span>
+                      <Badge variant="outline" className="shrink-0">
+                        #{e.electionId}
+                      </Badge>
+                      <Badge variant="secondary" className="shrink-0">
+                        {e.listName}
+                      </Badge>
+                    </div>
+                    {meta.name && (
+                      <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {displayTitle}
+                      </div>
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      <span className="inline-flex items-center gap-1">
+                        <Users className="size-3.5" />
+                        {e.options.length} candidate{e.options.length === 1 ? "" : "s"}
+                      </span>
+                      <span className="inline-flex items-center gap-1">
+                        <Clock className="size-3.5" />
+                        {closed ? "closed" : "closes"}{" "}
+                        {new Date(e.closesAt * 1000).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                      {resultsVisible && (
+                        <span className="inline-flex items-center gap-1">
+                          <Trophy className="size-3.5" />
+                          {e.totalVotes} vote{e.totalVotes === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 flex-col items-end justify-between gap-2 self-stretch">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                        closed
+                          ? "bg-muted text-muted-foreground"
+                          : "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/30"
+                      }`}
+                    >
+                      {!closed && (
+                        <span className="size-1.5 rounded-full bg-emerald-400" />
+                      )}
+                      {closed ? "Closed" : "Open"}
+                    </span>
+                    <ArrowRight className="size-4 text-muted-foreground/40 transition group-hover:translate-x-0.5 group-hover:text-primary" />
                   </div>
                 </button>
               );
