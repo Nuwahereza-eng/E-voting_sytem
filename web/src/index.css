@@ -311,6 +311,62 @@
   }
 }
 
+/* Signal travelling along the hero chain path. The dash is short and the
+   gap is long, so a single lit segment appears to run end-to-end. */
+@keyframes cn-travel {
+  0% {
+    stroke-dashoffset: 260;
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+/* Soft breathing halo around the larger voter nodes. */
+@keyframes cn-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.1;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.28;
+  }
+}
+
+/* Gentle vertical bounce for the floating margin medallions. */
+@keyframes sauti-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Twinkle for the small scattered nodes in the margins. */
+@keyframes sauti-twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.3);
+  }
+}
+
 @layer utilities {
   /* Fade-and-rise on mount. Pair with .reveal-delay-N for a stagger. */
   .reveal {
@@ -340,12 +396,35 @@
     background-size: 200% auto;
     animation: sauti-sheen 6s linear infinite;
   }
+
+  /* Hero chain visual: travelling signal + breathing node halos. */
+  .cn-pulse {
+    stroke-dasharray: 26 234;
+    animation: cn-travel 3.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+  .cn-halo {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: cn-breathe 4s ease-in-out infinite;
+  }
+
+  /* Floating margin decor. */
+  .bob {
+    animation: sauti-bob 5s ease-in-out infinite;
+  }
+  .twinkle {
+    animation: sauti-twinkle 3.2s ease-in-out infinite;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .reveal,
   .float-slow,
   .text-sheen,
+  .cn-pulse,
+  .cn-halo,
+  .bob,
+  .twinkle,
   .pulse-dot::before {
     animation: none !important;
     opacity: 1 !important;

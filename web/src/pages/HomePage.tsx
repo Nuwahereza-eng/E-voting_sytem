@@ -15,6 +15,8 @@ import {
   StellarLogo,
   SunbirdLogo,
 } from "@/components/BrandLogos";
+import { HeroDecor } from "@/components/HeroDecor";
+import { PageNodes } from "@/components/PageNodes";
 import {
   Card,
   CardContent,
@@ -37,102 +39,110 @@ import {
 // — and then get out of the user's way.
 export function HomePage() {
   return (
-    <>
-      <section className="mx-auto max-w-2xl px-2 pb-10 pt-2 text-center sm:pb-12">
-        <Badge variant="outline" className="mb-4">
-          <ShieldCheck className="mr-1" /> Verifiable on Stellar
-        </Badge>
-        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
-          Community decisions{" "}
-          <span className="text-sheen bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-            no one can quietly rewrite.
-          </span>
-        </h1>
-        <p className="mx-auto mt-4 max-w-lg text-base text-muted-foreground">
-          Vote from a wallet or with a one-time SMS code. Every tally is
-          public and independently auditable.
-        </p>
-      </section>
+    <div className="relative">
+      {/* Full-page ambient node field behind all content. */}
+      <PageNodes />
+      <div className="relative z-10">
+        <section className="relative mx-auto max-w-5xl pb-10 pt-2 sm:pb-12">
+          {/* Floating brand + node visuals in the empty side gutters. */}
+          <HeroDecor />
+          <div className="relative z-10 mx-auto max-w-2xl px-2 text-center">
+            <Badge variant="outline" className="mb-4">
+              <ShieldCheck className="mr-1" /> Verifiable on Stellar
+            </Badge>
+            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl">
+              Community decisions{" "}
+              <span className="text-sheen bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+                no one can quietly rewrite.
+              </span>
+            </h1>
+            <p className="mx-auto mt-4 max-w-lg text-base text-muted-foreground">
+              Vote from a wallet or with a one-time SMS code. Every tally is
+              public and independently auditable.
+            </p>
+          </div>
+        </section>
 
-      <section className="grid grid-cols-1 gap-5 md:grid-cols-2">
-        <LaneCard
-          to="/participate"
-          reveal="reveal reveal-delay-1"
-          icon={<VoteIcon className="size-7" />}
-          title="Participate in an election"
-          description="Cast a ballot, check if you're on the voter roll, or verify a public result."
-          cta="Start voting"
-          reassurance="Free · takes 30 seconds"
-          accent="from-accent/40 via-accent/10 to-transparent"
-          ring="ring-accent/50 group-hover:ring-accent/80"
-          border="border-accent/40 group-hover:border-accent/70"
-          glow="shadow-[0_20px_50px_-20px_hsl(var(--accent)/0.45)]"
-          ctaColor="text-accent"
-        />
-        <LaneCard
-          to="/organise"
-          reveal="reveal reveal-delay-2"
-          icon={<Landmark className="size-7" />}
-          title="Organise an election"
-          description="Enrol voters, register a community, and run a ballot. Small fee + refundable bond."
-          cta="Set up an election"
-          reassurance="Small fee · bond refunds on close"
-          accent="from-primary/40 via-primary/10 to-transparent"
-          ring="ring-primary/50 group-hover:ring-primary/80"
-          border="border-primary/40 group-hover:border-primary/70"
-          glow="shadow-[0_20px_50px_-20px_hsl(var(--primary)/0.45)]"
-          ctaColor="text-primary"
-        />
-      </section>
+        <section className="grid grid-cols-1 gap-5 md:grid-cols-2">
+          <LaneCard
+            to="/participate"
+            reveal="reveal reveal-delay-1"
+            icon={<VoteIcon className="size-7" />}
+            title="Participate in an election"
+            description="Cast a ballot, check if you're on the voter roll, or verify a public result."
+            cta="Start voting"
+            reassurance="Free · takes 30 seconds"
+            accent="from-accent/40 via-accent/10 to-transparent"
+            ring="ring-accent/50 group-hover:ring-accent/80"
+            border="border-accent/40 group-hover:border-accent/70"
+            glow="shadow-[0_20px_50px_-20px_hsl(var(--accent)/0.45)]"
+            ctaColor="text-accent"
+          />
+          <LaneCard
+            to="/organise"
+            reveal="reveal reveal-delay-2"
+            icon={<Landmark className="size-7" />}
+            title="Organise an election"
+            description="Enrol voters, register a community, and run a ballot. Small fee + refundable bond."
+            cta="Set up an election"
+            reassurance="Small fee · bond refunds on close"
+            accent="from-primary/40 via-primary/10 to-transparent"
+            ring="ring-primary/50 group-hover:ring-primary/80"
+            border="border-primary/40 group-hover:border-primary/70"
+            glow="shadow-[0_20px_50px_-20px_hsl(var(--primary)/0.45)]"
+            ctaColor="text-primary"
+          />
+        </section>
 
-      <section className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <TrustBadge
-          index={1}
-          icon={<EyeOff className="size-4" />}
-          title="No central authority"
-          body="Votes are recorded on Stellar. There's no server whose owner can edit the tally."
-          accent="text-primary bg-primary/15 ring-primary/30"
-        />
-        <TrustBadge
-          index={2}
-          icon={<ShieldCheck className="size-4" />}
-          title="Tamper-evident tally"
-          body="Every ballot is a signed Soroban transaction. Any change would break the chain."
-          accent="text-accent bg-accent/15 ring-accent/30"
-        />
-        <TrustBadge
-          index={3}
-          icon={<ScanLine className="size-4" />}
-          title="Open verification"
-          body="Anyone can pull the numbers directly from the contract — no login, no trust in us."
-          accent="text-emerald-400 bg-emerald-500/15 ring-emerald-500/30"
-        />
-      </section>
+        <section className="mt-10 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <TrustBadge
+            index={1}
+            icon={<EyeOff className="size-4" />}
+            title="No central authority"
+            body="Votes are recorded on Stellar. There's no server whose owner can edit the tally."
+            accent="text-primary bg-primary/15 ring-primary/30"
+          />
+          <TrustBadge
+            index={2}
+            icon={<ShieldCheck className="size-4" />}
+            title="Tamper-evident tally"
+            body="Every ballot is a signed Soroban transaction. Any change would break the chain."
+            accent="text-accent bg-accent/15 ring-accent/30"
+          />
+          <TrustBadge
+            index={3}
+            icon={<ScanLine className="size-4" />}
+            title="Open verification"
+            body="Anyone can pull the numbers directly from the contract — no login, no trust in us."
+            accent="text-emerald-400 bg-emerald-500/15 ring-emerald-500/30"
+          />
+        </section>
 
-      <LiveStats />
+        <LiveStats />
 
-      <Card className="mt-8">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold">How it works</CardTitle>
-          <CardDescription className="text-xs">
-            Five steps from a name on a list to a public, verifiable tally.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ol className="grid grid-cols-1 gap-3 sm:grid-cols-5">
-            <HowStep n={1} title="Enrol" body="Voters added by ID. Custodial key per voter." />
-            <HowStep n={2} title="Commit" body="Merkle root of the roll goes on chain." />
-            <HowStep n={3} title="Open" body="Organiser pays fee, locks bond, opens ballot." />
-            <HowStep n={4} title="Vote" body="Freighter or SMS. Each vote a signed tx." />
-            <HowStep n={5} title="Verify" body="Anyone can pull the tally from the contract." />
-          </ol>
-        </CardContent>
-      </Card>
+        <Card className="mt-8">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold">How it works</CardTitle>
+            <CardDescription className="text-xs">
+              Five steps from a name on a list to a public, verifiable tally.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ol className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+              <HowStep n={1} title="Enrol" body="Voters added by ID. Custodial key per voter." />
+              <HowStep n={2} title="Commit" body="Merkle root of the roll goes on chain." />
+              <HowStep n={3} title="Open" body="Organiser pays fee, locks bond, opens ballot." />
+              <HowStep n={4} title="Vote" body="Freighter or SMS. Each vote a signed tx." />
+              <HowStep n={5} title="Verify" body="Anyone can pull the tally from the contract." />
+            </ol>
+          </CardContent>
+        </Card>
 
-      <PoweredBy />
+        <PoweredBy />
 
-      <TransparencyCard />
-    </>
+        <TransparencyCard />
+      </div>
+    </div>
   );
 }
 
@@ -315,6 +325,9 @@ function LiveStats() {
     };
   }, [tick]);
 
+  // Start the count-up only once the tiles scroll into view.
+  const { ref, inView } = useInView<HTMLDivElement>();
+
   if (!stats) return null;
 
   if (stats.elections === 0) {
@@ -344,12 +357,13 @@ function LiveStats() {
         <span className="pulse-dot" aria-hidden />
         <span aria-live="polite">Live on Stellar testnet</span>
       </div>
-      <div className="grid grid-cols-3 gap-3">
-        <StatTile label="Communities" value={stats.communities} />
-        <StatTile label="Elections" value={stats.elections} />
+      <div ref={ref} className="grid grid-cols-3 gap-3">
+        <StatTile label="Communities" value={stats.communities} active={inView} />
+        <StatTile label="Elections" value={stats.elections} active={inView} />
         <StatTile
           label="Votes cast"
           value={stats.votes}
+          active={inView}
           icon={<Activity className="size-3.5" />}
         />
       </div>
@@ -360,13 +374,15 @@ function LiveStats() {
 function StatTile({
   label,
   value,
+  active,
   icon,
 }: {
   label: string;
   value: number;
+  active: boolean;
   icon?: React.ReactNode;
 }) {
-  const display = useCountUp(value);
+  const display = useCountUp(value, active);
   return (
     <Card className="group transition duration-300 hover:-translate-y-0.5 hover:border-border">
       <CardContent className="flex flex-col items-center justify-center gap-1 py-5 text-center">
@@ -383,14 +399,17 @@ function StatTile({
 }
 
 // Animate a number from its previous value up (or down) to the target
-// over a short duration using requestAnimationFrame. Respects the
-// user's reduced-motion preference by snapping straight to the value.
-function useCountUp(target: number, durationMs = 900): number {
+// over a short duration using requestAnimationFrame. Waits until `active`
+// is true (i.e. the tiles have scrolled into view) before running, and
+// respects the user's reduced-motion preference by snapping to the value.
+function useCountUp(target: number, active: boolean, durationMs = 900): number {
   const [display, setDisplay] = useState(0);
   const fromRef = useRef(0);
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
+    // Hold at the starting value until the section is on screen.
+    if (!active) return;
     const prefersReduced =
       typeof window !== "undefined" &&
       window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
@@ -417,9 +436,43 @@ function useCountUp(target: number, durationMs = 900): number {
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
     };
-  }, [target, durationMs]);
+  }, [target, durationMs, active]);
 
   return display;
+}
+
+// Report whether an element has scrolled into the viewport. Uses a
+// callback ref so it attaches the observer exactly when the node mounts
+// (the stats grid appears only after data loads). Fires once, then stops
+// observing, so the count-up runs a single time.
+function useInView<T extends Element>(
+  rootMargin = "0px 0px -15% 0px",
+): { ref: (node: T | null) => void; inView: boolean } {
+  const [inView, setInView] = useState(false);
+  const obsRef = useRef<IntersectionObserver | null>(null);
+
+  const ref = (node: T | null) => {
+    obsRef.current?.disconnect();
+    obsRef.current = null;
+    if (!node || inView) return;
+    if (typeof IntersectionObserver === "undefined") {
+      setInView(true);
+      return;
+    }
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setInView(true);
+          obs.disconnect();
+        }
+      },
+      { rootMargin, threshold: 0.25 },
+    );
+    obs.observe(node);
+    obsRef.current = obs;
+  };
+
+  return { ref, inView };
 }
 
 // Public transparency block — click-to-copy contract ID and a link to
