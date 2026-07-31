@@ -29,10 +29,10 @@ ballots.
 
 ## Live demo
 
-- Web: <https://sauti.example> _(replace with your deployment)_
+- Web: <https://decentralized-e-voting-sytem.vercel.app/>
 - Contract on Stellar Expert:
   <https://stellar.expert/explorer/testnet/contract/CDLYCBSVJ4NFTXT22D3CQXB7WPK3D5DLS7TOCOLKFM6AO5HUZK7Z6IDZ>
-- 90-second walkthrough: _(link your Loom / YouTube)_
+- 90-second walkthrough: _(https://youtu.be/_xIx9ybzdVs?si=QbVdOxb5X1Gyo1lp)_
 
 Try it yourself: open the demo, go to **Verify**, and paste any
 election ID. The numbers you see are being read from the Stellar
