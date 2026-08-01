@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { config as appConfig } from "./config";
 import { LanguageProvider, useLanguage } from "./lang";
 import { AutoTranslate } from "./autoTranslate";
+import { WalletProvider } from "./wallet";
+import { Sidebar } from "./components/Sidebar";
 
 // Lazy-load every non-home page so the initial bundle stays small.
 // HomePage is eager because it is the landing route.
@@ -28,7 +30,7 @@ function Nav() {
   const isMainnet = network.includes("main") || network === "public";
   return (
     <nav className="sticky top-0 z-30 border-b border-border/60 bg-background/70 backdrop-blur">
-      <div className="mx-auto flex h-20 max-w-5xl items-center gap-3 px-5">
+      <div className="mx-auto flex h-20 max-w-7xl items-center gap-3 px-5">
         <Link
           to="/"
           className="group inline-flex items-center hover:no-underline"
@@ -129,10 +131,13 @@ function TranslatingOverlay() {
 export function App() {
   return (
     <LanguageProvider>
+      <WalletProvider>
       <AutoTranslate />
       <TranslatingOverlay />
       <Nav />
-      <div className="mx-auto w-full max-w-5xl px-5 pb-24 pt-8">
+      <div className="mx-auto flex w-full max-w-7xl gap-6 px-5 pb-24 pt-8">
+        <Sidebar />
+        <div className="mx-auto w-full min-w-0 max-w-5xl flex-1">
         <Suspense
           fallback={
             <div className="flex items-center justify-center py-24 text-sm text-muted-foreground">
@@ -169,7 +174,9 @@ export function App() {
           <Route path="/onboard" element={<Navigate to="/voters" replace />} />
         </Routes>
         </Suspense>
+        </div>
       </div>
+      </WalletProvider>
     </LanguageProvider>
   );
 }
