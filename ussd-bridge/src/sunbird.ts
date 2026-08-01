@@ -101,8 +101,10 @@ export async function translate(input: TranslateInput): Promise<string> {
   if (source === target) return text;
 
   if (!isConfigured()) {
-    // Dev stub: prefix so the UI can visibly show "translation happened".
-    return `[${target}] ${text}`;
+    // Dev stub: Sunbird isn't configured, so we can't translate. Return the
+    // original text unchanged (rather than a "[lang] …" marker) so the UI
+    // shows readable English instead of placeholder-tagged strings.
+    return text;
   }
 
   const token = await getToken();
