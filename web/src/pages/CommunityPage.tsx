@@ -26,6 +26,44 @@ export function CommunityPage() {
   const [communityId, setCommunityId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Communities this wallet already admins. Shown so the organiser can
+  // reuse an existing one instead of accidentally minting a duplicate
+  // (which is how a dozen identically-named "Kampala SACCO" records got
+  // created before this list existed).
+  const [mine, setMine] = useState<CommunityInfo[] | null>(null);
+
+  useEffect(() => {
+    if (!wallet.address) {
+      setMine(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const next = await readNextCommunityId();
+        const ids = Array.from({ length: next }, (_, i) => i);
+        const infos = await Promise.all(
+          ids.map((id) => readCommunity(id).catch(() => null)),
+        );
+        if (cancelled) return;
+        setMine(
+          infos.filter(
+            (c): c is CommunityInfo => c !== null && c.admin === wallet.address,
+          ),
+        );
+      } catch {
+        if (!cancelled) setMine([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [wallet.address, communityId]);
+
+  // Does the typed name collide with one this wallet already admins?
+  const duplicate = (mine ?? []).find(
+    (c) => c.name.trim().toLowerCase() === name.trim().toLowerCase(),
+  );
 
   function members(): string[] {
     return membersText
@@ -125,6 +163,41 @@ export function CommunityPage() {
         </div>
       ) : (
         <div className="card">
+          {mine && mine.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <label>Your communities</label>
+              <div className="muted small" style={{ marginBottom: 8 }}>
+                Reuse one of these instead of creating a duplicate.
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {mine.map((c) => (
+                  <div
+                    key={c.id}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 8,
+                      border: "1px solid var(--border, #333)",
+                      borderRadius: 8,
+                      padding: "8px 10px",
+                    }}
+                  >
+                    <div>
+                      <b>{c.name}</b>{" "}
+                      <span className="muted small">
+                        · ID {c.id} · {c.memberCount} members
+                      </span>
+                    </div>
+                    <Link to="/election" className="secondary">
+                      Open election →
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <label>Community name</label>
           <input value={name} onChange={(e) => setName(e.target.value)} />
 
@@ -169,11 +242,22 @@ export function CommunityPage() {
           )}
 
           <div style={{ marginTop: 16 }}>
+            {duplicate && (
+              <div className="muted small" style={{ marginBottom: 8 }}>
+                ⚠️ You already admin a community named “{duplicate.name}” (ID {duplicate.id}).
+                Registering again creates a separate one. To change its member roll instead,
+                use “Sync members” below.
+              </div>
+            )}
             <button
               onClick={doRegister}
               disabled={busy || memberCount === 0}
             >
-              {busy ? "Registering..." : "Register community on-chain"}
+              {busy
+                ? "Registering..."
+                : duplicate
+                  ? "Register anyway (new community)"
+                  : "Register community on-chain"}
             </button>
           </div>
 
