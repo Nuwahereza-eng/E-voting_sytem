@@ -23,7 +23,7 @@ rewrite the tally.
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=flat-square)](#-license)
 
 **[🚀 Live Demo](https://decentralized-e-voting-sytem.vercel.app/)** ·
-**[🔍 On-Chain Contract](https://stellar.expert/explorer/testnet/contract/CDLYCBSVJ4NFTXT22D3CQXB7WPK3D5DLS7TOCOLKFM6AO5HUZK7Z6IDZ)** ·
+**[🔍 On-Chain Contract](https://stellar.expert/explorer/testnet/contract/CCZUQCUDNVRKFZCUWMUXZH5GXZ3EYJ3ZW2HOPPQQ4ON3R7H3EZNFOJEN)** ·
 **[🎬 90-sec Walkthrough](https://youtu.be/_xIx9ybzdVs?si=QbVdOxb5X1Gyo1lp)**
 
 </div>
@@ -59,7 +59,7 @@ Swahili) via Sunbird AI.
 | | |
 | :-- | :-- |
 | 🌐 **Web app** | <https://decentralized-e-voting-sytem.vercel.app/> |
-| 🔗 **Contract** | [Stellar Expert (testnet)](https://stellar.expert/explorer/testnet/contract/CDLYCBSVJ4NFTXT22D3CQXB7WPK3D5DLS7TOCOLKFM6AO5HUZK7Z6IDZ) |
+| 🔗 **Contract** | [Stellar Expert (testnet)](https://stellar.expert/explorer/testnet/contract/CCZUQCUDNVRKFZCUWMUXZH5GXZ3EYJ3ZW2HOPPQQ4ON3R7H3EZNFOJEN) |
 | 🎥 **Walkthrough** | [90-second video](https://youtu.be/_xIx9ybzdVs?si=QbVdOxb5X1Gyo1lp) |
 
 > **Try it yourself:** open the demo, go to **Verify**, and paste any election
