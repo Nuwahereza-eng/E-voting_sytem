@@ -37,7 +37,7 @@ export function issueOtp(refKey: string, msisdns: string[]): {
   code: string;
   expiresAt: number;
 } {
-  const code = randomCode(config.otp.length);
+  const code = config.otp.fixedCode || randomCode(config.otp.length);
   const expiresAt = Date.now() + config.otp.ttlSec * 1000;
   store.set(refKey, { code, expiresAt, msisdns, attempts: 0 });
   return { code, expiresAt };

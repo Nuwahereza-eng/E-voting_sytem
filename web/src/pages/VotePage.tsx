@@ -202,7 +202,7 @@ function IdVote({
   const [step, setStep] = useState<Step>(persisted.current?.step ?? "id");
 
   const [voterRef, setVoterRef] = useState(
-    defaultVoterRef ?? persisted.current?.voterRef ?? "",
+    defaultVoterRef ?? persisted.current?.voterRef ?? "cm981009810lhk",
   );
   const [otpBusy, setOtpBusy] = useState(false);
   const [otpErr, setOtpErr] = useState<string | null>(null);

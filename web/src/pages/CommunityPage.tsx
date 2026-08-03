@@ -122,13 +122,40 @@ export function CommunityPage() {
         wallet.sign,
       );
       setCommunityId(id);
-      // Persist the mapping "active bridge list == community #id" so
-      // the OTP voting flow can filter elections by community without
-      // asking the voter which list they're on. Non-fatal on failure —
-      // the organiser can rebind manually if this ever misses.
+      // Bind the bridge voter list to this new community so the OTP
+      // voting flow can filter elections by community. Crucially, bind
+      // the list whose Merkle root MATCHES the one we just registered —
+      // NOT whichever list happens to be active. Blindly binding the
+      // active list used to hijack an unrelated list's binding (e.g.
+      // registering "Kampala trader" would steal "utamu"'s binding),
+      // which then broke voting with an "out of sync" error.
       try {
-        const { activeId } = await fetchLists();
-        if (activeId) await bindListCommunity(activeId, id);
+        const { activeId, lists } = await fetchLists();
+        // Find the list whose current root equals the registered root.
+        const withRoots = await Promise.all(
+          lists.map(async (l) => {
+            try {
+              const lm = await fetchListMembers(l.id);
+              return { id: l.id, root: lm.root, communityId: l.communityId };
+            } catch {
+              return { id: l.id, root: "", communityId: l.communityId };
+            }
+          }),
+        );
+        const match = withRoots.find(
+          (l) => l.root.toLowerCase() === root.toLowerCase(),
+        );
+        // Prefer the root-matched list; otherwise only fall back to the
+        // active list if it isn't already bound to a different community.
+        const target =
+          match?.id ??
+          (() => {
+            const active = withRoots.find((l) => l.id === activeId);
+            return active && (active.communityId ?? null) === null
+              ? active.id
+              : undefined;
+          })();
+        if (target) await bindListCommunity(target, id);
       } catch {
         /* ignore — binding is best-effort */
       }

@@ -967,8 +967,7 @@ app.post("/otp/request", async (req: Request, res: Response) => {
     devMode,
     providerStatuses,
   };
-  if (config.otp.devEcho || devMode) body.devCode = code;
-  if (anyProviderError && !anySent) {
+  if (config.otp.devEcho || devMode) body.devCode = code;  if (anyProviderError && !anySent) {
     body.ok = false;
     body.error = anyProviderError.error;
   }

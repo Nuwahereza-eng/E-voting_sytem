@@ -40,6 +40,11 @@ export const config = {
     // If true, the /otp/request response includes the raw code (for
     // demos + local development). Never set this in production.
     devEcho: process.env.OTP_DEV_ECHO === "1",
+    // Demo override: when set, every OTP issued is this exact code and
+    // it is NOT echoed back in the API response. Lets a presenter type
+    // a known code without the dashboard leaking it on screen. Leave
+    // empty for real random one-time codes.
+    fixedCode: process.env.OTP_FIXED_CODE ?? "",
   },
   // Sunbird AI (translate + speech-to-text for Ugandan languages).
   // Provide either SUNBIRD_API_KEY (recommended — the long-lived key you
