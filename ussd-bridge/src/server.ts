@@ -967,7 +967,13 @@ app.post("/otp/request", async (req: Request, res: Response) => {
     devMode,
     providerStatuses,
   };
-  if (config.otp.devEcho || devMode) body.devCode = code;  if (anyProviderError && !anySent) {
+  // Echo the raw code only when there's no fixed demo code. A fixed
+  // code is known to the presenter, so we deliberately keep it out of
+  // the API response (and thus off the dashboard).
+  if (!config.otp.fixedCode && (config.otp.devEcho || devMode)) {
+    body.devCode = code;
+  }
+  if (anyProviderError && !anySent) {
     body.ok = false;
     body.error = anyProviderError.error;
   }

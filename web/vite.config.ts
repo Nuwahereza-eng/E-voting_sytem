@@ -7,6 +7,11 @@ import path from "node:path";
 export default defineConfig({
   plugins: [react()],
   server: {
+    // Dedicated port for Sauti so it never collides with other projects
+    // that use Vite's default 5173. `strictPort` makes startup fail loudly
+    // instead of silently hopping to another port.
+    port: 5273,
+    strictPort: true,
     // Use polling to avoid ENOSPC on machines with a low
     // `fs.inotify.max_user_watches`. Slightly higher CPU, much less pain.
     watch: {

@@ -22,5 +22,45 @@
     "optionIndex": 0,
     "timestamp": 1785325183312,
     "channel": "web"
+  },
+  {
+    "electionId": 1,
+    "listId": "utamu",
+    "memberIndex": 0,
+    "optionIndex": 0,
+    "timestamp": 1785771438882,
+    "channel": "web"
+  },
+  {
+    "electionId": 8,
+    "listId": "utamu",
+    "memberIndex": 0,
+    "optionIndex": 0,
+    "timestamp": 1785773368928,
+    "channel": "web"
+  },
+  {
+    "electionId": 9,
+    "listId": "utamu",
+    "memberIndex": 0,
+    "optionIndex": 0,
+    "timestamp": 1785774997333,
+    "channel": "web"
+  },
+  {
+    "electionId": 10,
+    "listId": "utamu",
+    "memberIndex": 0,
+    "optionIndex": 0,
+    "timestamp": 1789980657724,
+    "channel": "web"
+  },
+  {
+    "electionId": 11,
+    "listId": "utamu",
+    "memberIndex": 0,
+    "optionIndex": 0,
+    "timestamp": 1789983363337,
+    "channel": "web"
   }
 ]
